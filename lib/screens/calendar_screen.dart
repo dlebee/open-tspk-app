@@ -501,7 +501,7 @@ class _TodayView extends ConsumerWidget {
           ),
           const SizedBox(height: 8),
           ...unscheduledDoses.map((d) {
-            final name = medicineById[d.medicineId]?.name ?? 'Unknown';
+            final name = d.medicineName ?? medicineById[d.medicineId]?.name ?? 'Unknown';
             final t = d.takenAt ?? d.recordedAt;
             final timeStr =
                 '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
@@ -646,7 +646,7 @@ class _DayDetailSheet extends ConsumerWidget {
           ),
           const SizedBox(height: 8),
           ...unscheduledDoses.map((d) {
-            final name = medicineById[d.medicineId]?.name ?? 'Unknown';
+            final name = d.medicineName ?? medicineById[d.medicineId]?.name ?? 'Unknown';
             final t = d.takenAt ?? d.recordedAt;
             final timeStr =
                 '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';

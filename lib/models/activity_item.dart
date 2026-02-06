@@ -26,13 +26,32 @@ class ActivityItem {
   });
 
   factory ActivityItem.fromDose(MedicineDose d, String medicineName) {
+    final isScheduled = d.scheduledDate != null && d.scheduledTime != null;
+    
+    // For skipped doses, recordedAt is already set to scheduled date/time
+    // For taken doses, use takenAt if available, otherwise recordedAt
+    // For ad-hoc doses, use recordedAt
     final dt = d.takenAt ?? d.recordedAt;
     final timeStr =
         '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
-    final isScheduled = d.scheduledDate != null && d.scheduledTime != null;
-    final sub = isScheduled
-        ? 'Scheduled • Taken at $timeStr'
-        : 'Ad-hoc • $timeStr';
+    
+    String sub;
+    if (isScheduled) {
+      // Explicitly check for skipped status first
+      if (d.status == DoseStatus.skipped) {
+        // For skipped doses, show scheduled time (recordedAt is already scheduled time)
+        final scheduledTimeStr = d.scheduledTime ?? timeStr;
+        sub = 'Scheduled • Skipped ($scheduledTimeStr)';
+      } else if (d.status == DoseStatus.taken) {
+        sub = 'Scheduled • Taken at $timeStr';
+      } else {
+        // Fallback (shouldn't happen, but be defensive)
+        sub = 'Scheduled • $timeStr';
+      }
+    } else {
+      sub = 'Ad-hoc • $timeStr';
+    }
+    
     return ActivityItem(
       type: ActivityType.dose,
       date: dt,

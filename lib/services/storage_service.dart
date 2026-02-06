@@ -105,4 +105,13 @@ class StorageService {
   Future<void> setDeveloperMode(bool enabled) async {
     await _preferences?.put('developerMode', enabled ? 'true' : 'false');
   }
+
+  /// Wipes all data from all boxes. This is irreversible.
+  Future<void> wipeAllData() async {
+    await _medicines?.clear();
+    await _doses?.clear();
+    await _flareUps?.clear();
+    await _appointments?.clear();
+    await _preferences?.clear();
+  }
 }

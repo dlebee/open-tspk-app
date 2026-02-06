@@ -7,6 +7,9 @@ import '../services/export_service.dart';
 import '../providers/dose_provider.dart';
 import '../providers/flare_up_provider.dart';
 import '../providers/medicine_provider.dart';
+import '../services/storage_service.dart';
+import '../services/notification_service.dart';
+import '../providers/storage_provider.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -61,6 +64,15 @@ class SettingsScreen extends ConsumerWidget {
             onTap: () => _exportData(context, ref),
           ),
           const Divider(),
+          ListTile(
+            leading: const Icon(Icons.delete_forever, color: Colors.red),
+            title: const Text('Wipe all data'),
+            subtitle: const Text('Delete all medicines, doses, flare-ups, and appointments'),
+            textColor: Colors.red,
+            iconColor: Colors.red,
+            onTap: () => _confirmWipeData(context, ref),
+          ),
+          const Divider(),
           const ListTile(
             leading: Icon(Icons.cloud),
             title: Text('Backup'),
@@ -92,5 +104,112 @@ class SettingsScreen extends ConsumerWidget {
         const SnackBar(content: Text('Data exported')),
       );
     }
+  }
+
+  Future<void> _confirmWipeData(BuildContext context, WidgetRef ref) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => _WipeDataConfirmationDialog(),
+    );
+
+    if (confirmed != true) return;
+
+    try {
+      // Cancel all notifications
+      await NotificationService.cancelAll();
+
+      // Wipe all data from storage
+      final storage = ref.read(storageServiceProvider);
+      await storage.wipeAllData();
+
+      // Refresh all providers to reflect empty state
+      ref.invalidate(medicinesProvider);
+      ref.invalidate(dosesProvider);
+      ref.invalidate(flareUpsProvider);
+      ref.invalidate(appointmentsProvider);
+      ref.invalidate(developerModeProvider);
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('All data has been wiped'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to wipe data: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+}
+
+class _WipeDataConfirmationDialog extends StatefulWidget {
+  @override
+  State<_WipeDataConfirmationDialog> createState() =>
+      _WipeDataConfirmationDialogState();
+}
+
+class _WipeDataConfirmationDialogState
+    extends State<_WipeDataConfirmationDialog> {
+  final _textController = TextEditingController();
+  static const _confirmationText = 'i am sure';
+
+  @override
+  void dispose() {
+    _textController.dispose();
+    super.dispose();
+  }
+
+  bool get _isConfirmed => _textController.text.trim().toLowerCase() == _confirmationText;
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Wipe all data?'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'This will permanently delete all medicines, doses, flare-ups, appointments, and preferences. This action cannot be undone.',
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'To confirm, please type "i am sure" below:',
+              style: TextStyle(fontWeight: FontWeight.w500),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _textController,
+              decoration: const InputDecoration(
+                hintText: 'i am sure',
+                border: OutlineInputBorder(),
+              ),
+              onChanged: (_) => setState(() {}),
+              autofocus: true,
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _isConfirmed ? () => Navigator.pop(context, true) : null,
+          style: FilledButton.styleFrom(backgroundColor: Colors.red),
+          child: const Text('Wipe all data'),
+        ),
+      ],
+    );
   }
 }

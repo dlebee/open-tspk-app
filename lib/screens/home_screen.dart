@@ -29,8 +29,9 @@ class HomeScreen extends ConsumerWidget {
     final yesterdayScheduled = ref.watch(scheduledDosesForDateProvider(yesterday));
     final yesterdayUnscheduled = ref.watch(unscheduledDosesForDateProvider(yesterday));
 
-    final medicines = ref.watch(medicinesProvider).valueOrNull ?? [];
-    final medicineById = {for (final m in medicines) m.id: m};
+    final allMedicines = ref.watch(medicinesProvider).valueOrNull ?? [];
+    final activeMedicines = ref.watch(medicinesProvider).valueOrNull ?? [];
+    final medicineById = {for (final m in allMedicines) m.id: m};
     final appointments = ref.watch(appointmentsProvider).valueOrNull ?? [];
     final nextAppointment = appointments
         .where((a) => a.date.isAfter(now))
@@ -53,7 +54,7 @@ class HomeScreen extends ConsumerWidget {
         actions: [
           IconButton(
             icon: const Icon(Icons.add_circle_outline),
-            onPressed: () => _showLogDoseDialog(context, ref, medicines),
+            onPressed: () => _showLogDoseDialog(context, ref, activeMedicines),
             tooltip: 'Log dose',
           ),
         ],
@@ -63,7 +64,7 @@ class HomeScreen extends ConsumerWidget {
         children: [
           _SectionHeader(
             title: 'Today\'s doses',
-            onTap: () => _showLogDoseDialog(context, ref, medicines),
+            onTap: () => _showLogDoseDialog(context, ref, activeMedicines),
           ),
           if (todayEmpty)
             const Padding(
@@ -86,7 +87,7 @@ class HomeScreen extends ConsumerWidget {
               ),
               const SizedBox(height: 8),
               ...todayUnscheduled.map((d) {
-                final name = medicineById[d.medicineId]?.name ?? 'Unknown';
+                final name = d.medicineName ?? medicineById[d.medicineId]?.name ?? 'Unknown';
                 final t = d.takenAt ?? d.recordedAt;
                 final timeStr =
                     '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
@@ -102,7 +103,7 @@ class HomeScreen extends ConsumerWidget {
           const SizedBox(height: 24),
           _SectionHeader(
             title: 'Yesterday\'s doses',
-            onTap: () => _showLogDoseDialog(context, ref, medicines),
+            onTap: () => _showLogDoseDialog(context, ref, activeMedicines),
           ),
           if (yesterdayEmpty)
             const Padding(
@@ -125,7 +126,7 @@ class HomeScreen extends ConsumerWidget {
               ),
               const SizedBox(height: 8),
               ...yesterdayUnscheduled.map((d) {
-                final name = medicineById[d.medicineId]?.name ?? 'Unknown';
+                final name = d.medicineName ?? medicineById[d.medicineId]?.name ?? 'Unknown';
                 final t = d.takenAt ?? d.recordedAt;
                 final timeStr =
                     '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';

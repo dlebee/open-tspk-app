@@ -81,14 +81,22 @@ List<ScheduledDose> _generateScheduledDosesForDate(
   final dayOfWeek = date.weekday; // 1=Mon, 7=Sun
   final result = <ScheduledDose>[];
   final dateStr = DateTime(date.year, date.month, date.day);
+  final now = DateTime.now();
+  final today = DateTime(now.year, now.month, now.day);
+  final isPastOrToday = !dateStr.isAfter(today);
 
+  // Create a map of medicines by ID for quick lookup
+  final medicineById = {for (final m in medicines) m.id: m};
+  final addedDoseIds = <String>{};
+
+  // Process existing medicines and generate scheduled doses
   for (final medicine in medicines) {
     final createdDate = DateTime(
       medicine.createdAt.year,
       medicine.createdAt.month,
       medicine.createdAt.day,
     );
-    if (date.isBefore(createdDate)) continue;
+    if (dateStr.isBefore(createdDate)) continue;
 
     for (var i = 0; i < medicine.schedules.length; i++) {
       final schedule = medicine.schedules[i];
@@ -115,6 +123,7 @@ List<ScheduledDose> _generateScheduledDosesForDate(
               ? ScheduledDoseStatus.taken
               : ScheduledDoseStatus.skipped;
           takenAt = matchingDose.takenAt ?? matchingDose.recordedAt;
+          addedDoseIds.add(matchingDose.id);
         } else {
           final parts = time.split(':');
           final scheduledDateTime = DateTime(
@@ -131,13 +140,51 @@ List<ScheduledDose> _generateScheduledDosesForDate(
 
         result.add(ScheduledDose(
           medicineId: medicine.id,
-          medicineName: medicine.name,
+          medicineName: matchingDose?.medicineName ?? medicine.name,
           eye: schedule.eye,
           scheduledDate: scheduledDate,
           scheduledTime: time,
           status: status,
           takenAt: takenAt,
           dose: matchingDose,
+        ));
+      }
+    }
+  }
+
+  // Add orphaned scheduled doses (from deleted medicines) for past dates and today
+  if (isPastOrToday) {
+    for (final dose in doses) {
+      // Skip if already added or not a scheduled dose
+      if (addedDoseIds.contains(dose.id)) continue;
+      if (dose.scheduledDate == null || dose.scheduledTime == null) continue;
+      
+      // Check if this dose is for the date we're looking for
+      final doseDate = DateTime(
+        dose.scheduledDate!.year,
+        dose.scheduledDate!.month,
+        dose.scheduledDate!.day,
+      );
+      if (!_sameDay(doseDate, dateStr)) continue;
+
+      // Check if medicine exists (if not, it's orphaned)
+      final medicine = medicineById[dose.medicineId];
+      if (medicine == null && dose.medicineName != null) {
+        // Orphaned dose - use stored medicine name
+        final status = dose.status == DoseStatus.taken
+            ? ScheduledDoseStatus.taken
+            : ScheduledDoseStatus.skipped;
+        final takenAt = dose.takenAt ?? dose.recordedAt;
+
+        result.add(ScheduledDose(
+          medicineId: dose.medicineId,
+          medicineName: dose.medicineName!,
+          eye: dose.eye,
+          scheduledDate: dateStr,
+          scheduledTime: dose.scheduledTime!,
+          status: status,
+          takenAt: takenAt,
+          dose: dose,
         ));
       }
     }

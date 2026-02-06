@@ -73,12 +73,33 @@ class NotificationService {
     final storage = _storage;
     if (storage == null) return;
     final doses = storage.getDoses();
+    // Look up medicine name for denormalization
+    final medicines = storage.getMedicines();
+    final medicine = medicines.firstWhere((m) => m.id == medicineId, orElse: () => Medicine(id: '', name: 'Unknown', schedules: [], createdAt: DateTime.now()));
+    
+    // For skipped doses, use scheduled date/time as recordedAt
+    // For taken doses, use DateTime.now() as recordedAt
+    DateTime recordedAt;
+    if (status == DoseStatus.skipped) {
+      final parts = scheduledTime.split(':');
+      recordedAt = DateTime(
+        scheduledDate.year,
+        scheduledDate.month,
+        scheduledDate.day,
+        int.parse(parts[0]),
+        parts.length > 1 ? int.parse(parts[1]) : 0,
+      );
+    } else {
+      recordedAt = DateTime.now();
+    }
+    
     final dose = MedicineDose(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       medicineId: medicineId,
+      medicineName: medicine.name,
       eye: eye,
       status: status,
-      recordedAt: DateTime.now(),
+      recordedAt: recordedAt,
       scheduledDate: scheduledDate,
       scheduledTime: scheduledTime,
       takenAt: takenAt,

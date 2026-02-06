@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../models/activity_item.dart';
+import '../models/medicine_dose.dart';
 import '../widgets/flare_up_emojis.dart';
 import '../providers/activity_provider.dart';
 import '../widgets/unscheduled_dose_dialog.dart';
@@ -99,7 +100,7 @@ class _ActivityTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final (icon, color) = switch (item.type) {
-      ActivityType.dose => (Icons.medication, Colors.green),
+      ActivityType.dose => _getDoseIconAndColor(item.dose),
       ActivityType.flareUp => (Icons.warning_amber, Colors.orange),
       ActivityType.appointment => (Icons.event_note, Colors.blue),
     };
@@ -129,5 +130,12 @@ class _ActivityTile extends StatelessWidget {
         trailing: const Icon(Icons.chevron_right),
       ),
     );
+  }
+
+  (IconData, Color) _getDoseIconAndColor(MedicineDose? dose) {
+    if (dose != null && dose.status == DoseStatus.skipped) {
+      return (Icons.arrow_forward, Colors.orange);
+    }
+    return (Icons.medication, Colors.green);
   }
 }

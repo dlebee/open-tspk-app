@@ -13,7 +13,8 @@ class UnscheduledDoseDialog extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final medicines = ref.watch(medicinesProvider).valueOrNull ?? [];
-    final medicineName = medicines
+    final medicineName = dose.medicineName ??
+        medicines
             .where((m) => m.id == dose.medicineId)
             .map((m) => m.name)
             .firstOrNull ??

@@ -99,12 +99,27 @@ class LogScheduledDoseDialog extends ConsumerWidget {
     if (dose.dose != null) {
       await ref.read(dosesProvider.notifier).delete(dose.dose!.id);
     }
+    
+    final parts = dose.scheduledTime.split(':');
+    final scheduledDateTime = DateTime(
+      dose.scheduledDate.year,
+      dose.scheduledDate.month,
+      dose.scheduledDate.day,
+      int.parse(parts[0]),
+      parts.length > 1 ? int.parse(parts[1]) : 0,
+    );
+    
+    // For skipped doses, use scheduled date/time as recordedAt
+    // For taken doses, use DateTime.now() as recordedAt
+    final recordedAt = status == DoseStatus.skipped ? scheduledDateTime : DateTime.now();
+    
     final newDose = MedicineDose(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       medicineId: dose.medicineId,
+      medicineName: dose.medicineName,
       eye: dose.eye,
       status: status,
-      recordedAt: DateTime.now(),
+      recordedAt: recordedAt,
       scheduledDate: dose.scheduledDate,
       scheduledTime: dose.scheduledTime,
       takenAt: takenAt,

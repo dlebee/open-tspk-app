@@ -5,6 +5,7 @@ enum DoseStatus { taken, skipped }
 class MedicineDose {
   final String id;
   final String medicineId;
+  final String? medicineName; // Denormalized for historical preservation
   final Eye eye;
   final DoseStatus status;
   final DateTime recordedAt;
@@ -15,6 +16,7 @@ class MedicineDose {
   MedicineDose({
     required this.id,
     required this.medicineId,
+    this.medicineName,
     required this.eye,
     required this.status,
     required this.recordedAt,
@@ -26,6 +28,7 @@ class MedicineDose {
   MedicineDose copyWith({
     String? id,
     String? medicineId,
+    String? medicineName,
     Eye? eye,
     DoseStatus? status,
     DateTime? recordedAt,
@@ -36,6 +39,7 @@ class MedicineDose {
     return MedicineDose(
       id: id ?? this.id,
       medicineId: medicineId ?? this.medicineId,
+      medicineName: medicineName ?? this.medicineName,
       eye: eye ?? this.eye,
       status: status ?? this.status,
       recordedAt: recordedAt ?? this.recordedAt,
@@ -48,6 +52,7 @@ class MedicineDose {
   Map<String, dynamic> toJson() => {
         'id': id,
         'medicineId': medicineId,
+        if (medicineName != null) 'medicineName': medicineName,
         'eye': eye.name,
         'status': status.name,
         'recordedAt': recordedAt.toIso8601String(),
@@ -59,6 +64,7 @@ class MedicineDose {
   factory MedicineDose.fromJson(Map<String, dynamic> json) => MedicineDose(
         id: json['id'] as String,
         medicineId: json['medicineId'] as String,
+        medicineName: json['medicineName'] as String?,
         eye: Eye.values.firstWhere(
           (e) => e.name == json['eye'],
           orElse: () => Eye.both,

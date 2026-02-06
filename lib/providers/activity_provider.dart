@@ -31,7 +31,7 @@ final activityLogProvider = Provider<AsyncValue<List<ActivityItem>>>((ref) {
   final items = <ActivityItem>[];
 
   for (final d in doses) {
-    final name = medicineById[d.medicineId]?.name ?? 'Unknown';
+    final name = d.medicineName ?? medicineById[d.medicineId]?.name ?? 'Unknown';
     items.add(ActivityItem.fromDose(d, name));
   }
   for (final f in flareUps) {

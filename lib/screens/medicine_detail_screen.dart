@@ -6,6 +6,7 @@ import '../navigation_keys.dart';
 import '../models/medicine.dart';
 import '../models/medicine_schedule.dart';
 import '../providers/medicine_provider.dart';
+import '../providers/dose_provider.dart';
 import '../providers/theme_provider.dart';
 import '../widgets/schedule_editor.dart';
 
@@ -143,6 +144,8 @@ class _MedicineDetailScreenState extends ConsumerState<MedicineDetailScreen> {
           schedules: _schedules,
         );
         await ref.read(medicinesProvider.notifier).update(medicine);
+        // Invalidate doses provider to refresh after medicine name update
+        ref.invalidate(dosesProvider);
       }
     } catch (_) {
       if (mounted) {
