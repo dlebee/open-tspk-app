@@ -107,11 +107,20 @@ class StorageService {
   }
 
   /// Wipes all data from all boxes. This is irreversible.
+  /// Preserves developer mode setting.
   Future<void> wipeAllData() async {
+    // Preserve developer mode setting before clearing preferences
+    final developerModeEnabled = getDeveloperMode();
+    
     await _medicines?.clear();
     await _doses?.clear();
     await _flareUps?.clear();
     await _appointments?.clear();
     await _preferences?.clear();
+    
+    // Restore developer mode setting
+    if (developerModeEnabled) {
+      await setDeveloperMode(true);
+    }
   }
 }
