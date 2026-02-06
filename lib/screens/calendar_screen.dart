@@ -614,7 +614,30 @@ class _DayDetailSheet extends ConsumerWidget {
           style: Theme.of(context).textTheme.titleLarge,
         ),
         const SizedBox(height: 16),
+        if (appointments.isNotEmpty) ...[
+          Text(
+            'Appointments',
+            style: Theme.of(context).textTheme.titleSmall,
+          ),
+          const SizedBox(height: 8),
+          ...appointments.map((a) {
+            final timeStr = '${a.date.hour.toString().padLeft(2, '0')}:${a.date.minute.toString().padLeft(2, '0')}';
+            return ListTile(
+              leading: Icon(Icons.event_note, color: Colors.purple.shade600),
+              title: Text(a.doctorOffice),
+              subtitle: Text('$timeStr${a.notes.isNotEmpty ? '\n${a.notes}' : ''}'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => onAppointmentTap(context, ref, a),
+            );
+          }),
+        ],
         if (scheduledDoses.isNotEmpty) ...[
+          if (appointments.isNotEmpty) const SizedBox(height: 16),
+          Text(
+            'Scheduled doses',
+            style: Theme.of(context).textTheme.titleSmall,
+          ),
+          const SizedBox(height: 8),
           ...scheduledDoses.map((d) => ListTile(
                 leading: Icon(
                   d.status == ScheduledDoseStatus.taken
@@ -639,7 +662,7 @@ class _DayDetailSheet extends ConsumerWidget {
               )),
         ],
         if (unscheduledDoses.isNotEmpty) ...[
-          if (scheduledDoses.isNotEmpty) const SizedBox(height: 16),
+          if (appointments.isNotEmpty || scheduledDoses.isNotEmpty) const SizedBox(height: 16),
           Text(
             'Unscheduled doses',
             style: Theme.of(context).textTheme.titleSmall,
@@ -660,7 +683,7 @@ class _DayDetailSheet extends ConsumerWidget {
           }),
         ],
         if (flareUps.isNotEmpty) ...[
-          if (scheduledDoses.isNotEmpty || unscheduledDoses.isNotEmpty) const SizedBox(height: 16),
+          if (appointments.isNotEmpty || scheduledDoses.isNotEmpty || unscheduledDoses.isNotEmpty) const SizedBox(height: 16),
           Text(
             'Flare-ups',
             style: Theme.of(context).textTheme.titleSmall,
@@ -685,24 +708,6 @@ class _DayDetailSheet extends ConsumerWidget {
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => onFlareUpTap(context, ref, f),
               )),
-        ],
-        if (appointments.isNotEmpty) ...[
-          if (scheduledDoses.isNotEmpty || unscheduledDoses.isNotEmpty || flareUps.isNotEmpty) const SizedBox(height: 16),
-          Text(
-            'Appointments',
-            style: Theme.of(context).textTheme.titleSmall,
-          ),
-          const SizedBox(height: 8),
-          ...appointments.map((a) {
-            final timeStr = '${a.date.hour.toString().padLeft(2, '0')}:${a.date.minute.toString().padLeft(2, '0')}';
-            return ListTile(
-              leading: Icon(Icons.event_note, color: Colors.purple.shade600),
-              title: Text(a.doctorOffice),
-              subtitle: Text('$timeStr${a.notes.isNotEmpty ? '\n${a.notes}' : ''}'),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => onAppointmentTap(context, ref, a),
-            );
-          }),
         ],
         if (scheduledDoses.isEmpty && unscheduledDoses.isEmpty && flareUps.isEmpty && appointments.isEmpty)
           const Text('No activity for this day'),

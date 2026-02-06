@@ -82,7 +82,7 @@ class HomeScreen extends ConsumerWidget {
             if (todayUnscheduled.isNotEmpty) ...[
               const SizedBox(height: 16),
               Text(
-                'Ad-hoc doses',
+                'Unscheduled doses',
                 style: Theme.of(context).textTheme.titleSmall,
               ),
               const SizedBox(height: 8),
@@ -121,7 +121,7 @@ class HomeScreen extends ConsumerWidget {
             if (yesterdayUnscheduled.isNotEmpty) ...[
               const SizedBox(height: 16),
               Text(
-                'Ad-hoc doses',
+                'Unscheduled doses',
                 style: Theme.of(context).textTheme.titleSmall,
               ),
               const SizedBox(height: 8),
