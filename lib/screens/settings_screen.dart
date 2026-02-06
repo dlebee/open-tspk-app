@@ -41,6 +41,19 @@ class SettingsScreen extends ConsumerWidget {
               );
             },
           ),
+          Consumer(
+            builder: (context, ref, _) {
+              final developerMode = ref.watch(developerModeProvider);
+              return SwitchListTile(
+                secondary: const Icon(Icons.developer_mode),
+                title: const Text('Developer mode'),
+                subtitle: const Text('Enable advanced features'),
+                value: developerMode,
+                onChanged: (v) =>
+                    ref.read(developerModeProvider.notifier).setEnabled(v),
+              );
+            },
+          ),
           ListTile(
             leading: const Icon(Icons.upload_file),
             title: const Text('Export data'),

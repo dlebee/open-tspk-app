@@ -4,9 +4,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'providers/dose_provider.dart';
 import 'providers/theme_provider.dart';
 import 'services/notification_service.dart';
+import 'screens/activity_log_screen.dart';
 import 'screens/appointments_screen.dart';
-import 'widgets/taken_time_picker.dart';
 import 'screens/calendar_screen.dart';
+import 'widgets/taken_time_picker.dart';
 import 'screens/flare_ups_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/medicines_screen.dart';
@@ -80,6 +81,7 @@ class _MainNavigatorState extends State<MainNavigator> {
     MedicinesScreen(),
     FlareUpsScreen(),
     AppointmentsScreen(),
+    ActivityLogScreen(),
     SettingsScreen(),
   ];
 
@@ -89,6 +91,7 @@ class _MainNavigatorState extends State<MainNavigator> {
     (icon: Icons.medication, label: 'Medicines'),
     (icon: Icons.warning_amber, label: 'Flare-ups'),
     (icon: Icons.event_note, label: 'Appointments'),
+    (icon: Icons.history, label: 'Activity'),
     (icon: Icons.settings, label: 'Settings'),
   ];
 

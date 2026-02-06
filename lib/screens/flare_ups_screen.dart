@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/flare_up.dart';
 import '../providers/flare_up_provider.dart';
+import '../widgets/flare_up_emojis.dart';
 import '../widgets/log_flare_up_sheet.dart';
 
 class FlareUpsScreen extends ConsumerWidget {
@@ -93,12 +94,24 @@ class FlareUpsScreen extends ConsumerWidget {
                 },
                 child: Card(
                   child: ListTile(
-                    leading: const Icon(Icons.warning_amber, color: Colors.orange),
-                    title: Text(_formatDate(f.date)),
-                    subtitle: Text(
-                      '${f.leftEye ? "L" : ""}${f.rightEye ? "R" : ""} '
-                      '${f.reason ?? ""} ${f.comment ?? ""}'.trim(),
+                    leading: FlareUpEyes(flareUp: f),
+                    title: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(_formatDate(f.date)),
+                        if (f.reason != null && f.reason!.isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            f.reason!,
+                            style: Theme.of(context).textTheme.titleSmall,
+                          ),
+                        ],
+                      ],
                     ),
+                    subtitle: f.comment != null && f.comment!.isNotEmpty
+                        ? Text(f.comment!)
+                        : null,
                     trailing: const Icon(Icons.chevron_right),
                     onTap: () => _showAddFlareUp(context, ref, existing: f),
                   ),

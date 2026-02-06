@@ -106,6 +106,10 @@ class _ScheduleCardState extends State<_ScheduleCard> {
               children: [
                 Expanded(
                   child: SegmentedButton<Eye>(
+                    showSelectedIcon: false,
+                    style: SegmentedButton.styleFrom(
+                      textStyle: Theme.of(context).textTheme.labelSmall,
+                    ),
                     segments: const [
                       ButtonSegment(value: Eye.left, label: Text('Left')),
                       ButtonSegment(value: Eye.right, label: Text('Right')),

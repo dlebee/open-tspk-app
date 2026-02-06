@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 
 import '../navigation_keys.dart';
 import '../models/medicine.dart';
 import '../models/medicine_schedule.dart';
 import '../providers/medicine_provider.dart';
+import '../providers/theme_provider.dart';
 import '../widgets/schedule_editor.dart';
 
 class MedicineDetailScreen extends ConsumerStatefulWidget {
@@ -21,6 +23,7 @@ class MedicineDetailScreen extends ConsumerStatefulWidget {
 class _MedicineDetailScreenState extends ConsumerState<MedicineDetailScreen> {
   late TextEditingController _nameController;
   late List<MedicineSchedule> _schedules;
+  late DateTime _startDate;
   bool _isNew = true;
   bool _isSaving = false;
 
@@ -31,6 +34,7 @@ class _MedicineDetailScreenState extends ConsumerState<MedicineDetailScreen> {
     _nameController = TextEditingController(text: widget.medicine?.name ?? '');
     _schedules = widget.medicine?.schedules.toList() ??
         [MedicineSchedule(eye: Eye.both, daysOfWeek: [1, 2, 3, 4, 5, 6, 7], times: ['21:00'])];
+    _startDate = widget.medicine?.createdAt ?? DateTime.now();
   }
 
   @override
@@ -62,6 +66,35 @@ class _MedicineDetailScreenState extends ConsumerState<MedicineDetailScreen> {
               hintText: 'e.g. Prednisolone',
             ),
           ),
+          if (_isNew) ...[
+            Consumer(
+              builder: (context, ref, _) {
+                final developerMode = ref.watch(developerModeProvider);
+                if (!developerMode) return const SizedBox.shrink();
+                return Column(
+                  children: [
+                    const SizedBox(height: 16),
+                    ListTile(
+                      title: const Text('Start date'),
+                      subtitle: Text(DateFormat('MMM d, yyyy').format(_startDate)),
+                      trailing: const Icon(Icons.calendar_today),
+                      onTap: () async {
+                        final date = await showDatePicker(
+                          context: context,
+                          initialDate: _startDate,
+                          firstDate: DateTime(2020),
+                          lastDate: DateTime.now(),
+                        );
+                        if (date != null) {
+                          setState(() => _startDate = date);
+                        }
+                      },
+                    ),
+                  ],
+                );
+              },
+            ),
+          ],
           const SizedBox(height: 24),
           Text('Schedules', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 8),
@@ -101,7 +134,7 @@ class _MedicineDetailScreenState extends ConsumerState<MedicineDetailScreen> {
           id: DateTime.now().millisecondsSinceEpoch.toString(),
           name: name,
           schedules: _schedules,
-          createdAt: DateTime.now(),
+          createdAt: _startDate,
         );
         await ref.read(medicinesProvider.notifier).add(medicine);
       } else {

@@ -1,4 +1,24 @@
+import 'package:flutter/material.dart';
+
 enum PainLevel { terrible, bad, medium, low }
+
+/// Color for each pain level (worse = more intense). null = no pain.
+Color painLevelColor(PainLevel? level) {
+  return switch (level) {
+    null => Colors.grey,
+    PainLevel.low => Colors.green,
+    PainLevel.medium => Colors.amber,
+    PainLevel.bad => Colors.deepOrange,
+    PainLevel.terrible => Colors.red.shade800,
+  };
+}
+
+extension FlareUpPainLevels on FlareUp {
+  PainLevel? get leftLevel => leftEye ? (leftPainLevel ?? PainLevel.low) : null;
+  PainLevel? get rightLevel => rightEye ? (rightPainLevel ?? PainLevel.low) : null;
+  bool get leftHasPain => leftEye;
+  bool get rightHasPain => rightEye;
+}
 
 class FlareUp {
   final String id;

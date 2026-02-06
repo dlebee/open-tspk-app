@@ -13,11 +13,13 @@ class StorageService {
   static const _dosesBox = 'doses';
   static const _flareUpsBox = 'flareUps';
   static const _appointmentsBox = 'appointments';
+  static const _preferencesBox = 'preferences';
 
   Box<String>? _medicines;
   Box<String>? _doses;
   Box<String>? _flareUps;
   Box<String>? _appointments;
+  Box<String>? _preferences;
 
   Future<void> init() async {
     final dir = await getApplicationDocumentsDirectory();
@@ -27,6 +29,7 @@ class StorageService {
     _doses = await Hive.openBox<String>(_dosesBox);
     _flareUps = await Hive.openBox<String>(_flareUpsBox);
     _appointments = await Hive.openBox<String>(_appointmentsBox);
+    _preferences = await Hive.openBox<String>(_preferencesBox);
   }
 
   List<Medicine> getMedicines() {
@@ -91,5 +94,15 @@ class StorageService {
       'list',
       jsonEncode(appointments.map((a) => a.toJson()).toList()),
     );
+  }
+
+  bool getDeveloperMode() {
+    final raw = _preferences?.get('developerMode');
+    if (raw == null) return false;
+    return raw == 'true';
+  }
+
+  Future<void> setDeveloperMode(bool enabled) async {
+    await _preferences?.put('developerMode', enabled ? 'true' : 'false');
   }
 }

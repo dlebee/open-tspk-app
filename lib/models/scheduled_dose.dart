@@ -1,7 +1,7 @@
 import 'medicine.dart';
 import 'medicine_dose.dart';
 
-enum ScheduledDoseStatus { taken, skipped, missed }
+enum ScheduledDoseStatus { taken, skipped, missed, scheduled }
 
 class ScheduledDose {
   final String medicineId;

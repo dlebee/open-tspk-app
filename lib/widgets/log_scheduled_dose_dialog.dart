@@ -69,6 +69,16 @@ class LogScheduledDoseDialog extends ConsumerWidget {
               foregroundColor: Colors.red,
             ),
           ),
+          if (dose.dose != null) ...[
+            const SizedBox(height: 16),
+            const Divider(),
+            const SizedBox(height: 8),
+            TextButton.icon(
+              onPressed: () => _untakeAndClose(context, ref),
+              icon: const Icon(Icons.undo, size: 20),
+              label: const Text('Untake'),
+            ),
+          ],
         ],
       ),
       actions: [
@@ -100,6 +110,13 @@ class LogScheduledDoseDialog extends ConsumerWidget {
       takenAt: takenAt,
     );
     await ref.read(dosesProvider.notifier).add(newDose);
+    if (context.mounted) Navigator.pop(context);
+  }
+
+  Future<void> _untakeAndClose(BuildContext context, WidgetRef ref) async {
+    if (dose.dose != null) {
+      await ref.read(dosesProvider.notifier).delete(dose.dose!.id);
+    }
     if (context.mounted) Navigator.pop(context);
   }
 }

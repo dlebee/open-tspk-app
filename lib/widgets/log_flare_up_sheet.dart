@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 import '../models/flare_up.dart';
 import '../providers/flare_up_provider.dart';
@@ -59,8 +60,6 @@ class LogFlareUpForm extends StatefulWidget {
 
 class _LogFlareUpFormState extends State<LogFlareUpForm> {
   late DateTime _date;
-  bool _leftEye = false;
-  bool _rightEye = false;
   PainLevel? _leftPain;
   PainLevel? _rightPain;
   String? _reason;
@@ -70,10 +69,12 @@ class _LogFlareUpFormState extends State<LogFlareUpForm> {
   void initState() {
     super.initState();
     _date = widget.existing?.date ?? DateTime.now();
-    _leftEye = widget.existing?.leftEye ?? false;
-    _rightEye = widget.existing?.rightEye ?? false;
-    _leftPain = widget.existing?.leftPainLevel;
-    _rightPain = widget.existing?.rightPainLevel;
+    _leftPain = widget.existing?.leftEye == true
+        ? (widget.existing?.leftPainLevel ?? PainLevel.low)
+        : null;
+    _rightPain = widget.existing?.rightEye == true
+        ? (widget.existing?.rightPainLevel ?? PainLevel.low)
+        : null;
     _reason = widget.existing?.reason;
     _commentController.text = widget.existing?.comment ?? '';
   }
@@ -112,34 +113,19 @@ class _LogFlareUpFormState extends State<LogFlareUpForm> {
                 if (d != null) setState(() => _date = d);
               },
             ),
-            CheckboxListTile(
-              title: const Text('Left eye'),
-              value: _leftEye,
-              onChanged: (v) => setState(() => _leftEye = v ?? false),
+            _PainEyeRow(
+              label: 'Left eye',
+              selected: _leftPain,
+              onSelected: (p) => setState(() => _leftPain = p),
+              flip: true,
             ),
-            if (_leftEye)
-              DropdownButtonFormField<PainLevel>(
-                value: _leftPain,
-                decoration: const InputDecoration(labelText: 'Left pain level'),
-                items: PainLevel.values
-                    .map((p) => DropdownMenuItem(value: p, child: Text(p.name)))
-                    .toList(),
-                onChanged: (p) => setState(() => _leftPain = p),
-              ),
-            CheckboxListTile(
-              title: const Text('Right eye'),
-              value: _rightEye,
-              onChanged: (v) => setState(() => _rightEye = v ?? false),
+            const SizedBox(height: 12),
+            _PainEyeRow(
+              label: 'Right eye',
+              selected: _rightPain,
+              onSelected: (p) => setState(() => _rightPain = p),
+              flip: false,
             ),
-            if (_rightEye)
-              DropdownButtonFormField<PainLevel>(
-                value: _rightPain,
-                decoration: const InputDecoration(labelText: 'Right pain level'),
-                items: PainLevel.values
-                    .map((p) => DropdownMenuItem(value: p, child: Text(p.name)))
-                    .toList(),
-                onChanged: (p) => setState(() => _rightPain = p),
-              ),
             DropdownButtonFormField<String>(
               value: _reason,
               decoration: const InputDecoration(labelText: 'Reason'),
@@ -194,14 +180,14 @@ class _LogFlareUpFormState extends State<LogFlareUpForm> {
                 ],
                 Expanded(
                   child: FilledButton(
-                    onPressed: (_leftEye || _rightEye)
+                    onPressed: (_leftPain != null || _rightPain != null)
                         ? () {
                             widget.onSave(FlareUp(
                               id: widget.existing?.id ??
                                   DateTime.now().millisecondsSinceEpoch.toString(),
                               date: _date,
-                              leftEye: _leftEye,
-                              rightEye: _rightEye,
+                              leftEye: _leftPain != null,
+                              rightEye: _rightPain != null,
                               leftPainLevel: _leftPain,
                               rightPainLevel: _rightPain,
                               reason: _reason,
@@ -215,6 +201,128 @@ class _LogFlareUpFormState extends State<LogFlareUpForm> {
                   ),
                 ),
               ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Pain levels ordered from least to most severe (left to right).
+const _painLevelOrder = [
+  PainLevel.low,
+  PainLevel.medium,
+  PainLevel.bad,
+  PainLevel.terrible,
+];
+
+class _PainEyeRow extends StatelessWidget {
+  const _PainEyeRow({
+    required this.label,
+    required this.selected,
+    required this.onSelected,
+    required this.flip,
+  });
+
+  final String label;
+  final PainLevel? selected;
+  final ValueChanged<PainLevel?> onSelected;
+  final bool flip;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: Theme.of(context).textTheme.titleSmall),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: _PainEyeChip(
+                level: null,
+                label: 'none',
+                isSelected: selected == null,
+                flip: flip,
+                onTap: () => onSelected(null),
+              ),
+            ),
+            ..._painLevelOrder.map((level) => Expanded(
+                  child: _PainEyeChip(
+                    level: level,
+                    label: level.name,
+                    isSelected: selected == level,
+                    flip: flip,
+                    onTap: () => onSelected(level),
+                  ),
+                )),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _PainEyeChip extends StatelessWidget {
+  const _PainEyeChip({
+    required this.level,
+    required this.label,
+    required this.isSelected,
+    required this.flip,
+    required this.onTap,
+  });
+
+  final PainLevel? level;
+  final String label;
+  final bool isSelected;
+  final bool flip;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = painLevelColor(level);
+    final opacity = level == null ? 0.25 : 1.0;
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+        decoration: BoxDecoration(
+          border: Border.all(
+            color: isSelected
+                ? Theme.of(context).colorScheme.primary
+                : Theme.of(context).colorScheme.outline.withOpacity(0.3),
+            width: isSelected ? 2 : 1,
+          ),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Opacity(
+              opacity: opacity,
+              child: Transform(
+                alignment: Alignment.center,
+                transform: Matrix4.identity()..scale(flip ? -1.0 : 1.0, 1.0),
+                child: SvgPicture.asset(
+                  'assets/icons/eye.svg',
+                  width: 28,
+                  height: 28,
+                  colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
+                ),
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              label,
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    fontSize: 10,
+                    color: isSelected
+                        ? Theme.of(context).colorScheme.primary
+                        : Theme.of(context).colorScheme.outline,
+                  ),
             ),
           ],
         ),

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 
 import '../models/medicine.dart';
 import '../models/medicine_dose.dart';
@@ -39,6 +40,10 @@ class _LogDoseDialogState extends ConsumerState<LogDoseDialog> {
             Text('Where', style: Theme.of(context).textTheme.titleSmall),
             const SizedBox(height: 8),
             SegmentedButton<Eye>(
+              showSelectedIcon: false,
+              style: SegmentedButton.styleFrom(
+                textStyle: Theme.of(context).textTheme.labelSmall,
+              ),
               segments: const [
                 ButtonSegment(value: Eye.left, label: Text('Left')),
                 ButtonSegment(value: Eye.right, label: Text('Right')),
@@ -50,10 +55,37 @@ class _LogDoseDialogState extends ConsumerState<LogDoseDialog> {
             ),
             const SizedBox(height: 16),
             ListTile(
-              title: const Text('Taken at'),
+              title: const Text('Date'),
+              subtitle: Text(_isToday(_takenAt)
+                  ? 'Today'
+                  : DateFormat('MMM d, yyyy').format(_takenAt)),
+              trailing: const Icon(Icons.calendar_today),
+              onTap: () async {
+                final date = await showDatePicker(
+                  context: context,
+                  initialDate: _takenAt,
+                  firstDate: DateTime(2020),
+                  lastDate: DateTime.now().add(const Duration(days: 365)),
+                );
+                if (date != null) {
+                  setState(() {
+                    _takenAt = DateTime(
+                      date.year,
+                      date.month,
+                      date.day,
+                      _takenAt.hour,
+                      _takenAt.minute,
+                    );
+                  });
+                }
+              },
+            ),
+            ListTile(
+              title: const Text('Time'),
               subtitle: Text(
                 '${_takenAt.hour.toString().padLeft(2, '0')}:${_takenAt.minute.toString().padLeft(2, '0')}',
               ),
+              trailing: const Icon(Icons.access_time),
               onTap: () async {
                 final time = await showTimePicker(
                   context: context,
@@ -101,5 +133,10 @@ class _LogDoseDialogState extends ConsumerState<LogDoseDialog> {
         ),
       ],
     );
+  }
+
+  bool _isToday(DateTime dt) {
+    final now = DateTime.now();
+    return dt.year == now.year && dt.month == now.month && dt.day == now.day;
   }
 }
