@@ -15,7 +15,7 @@ class DeveloperModeNotifier extends StateNotifier<bool> {
     _load();
   }
 
-  final StorageService _storage;
+  final IStorageService _storage;
 
   Future<void> _load() async {
     state = _storage.getDeveloperMode();

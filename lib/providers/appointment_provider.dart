@@ -14,7 +14,7 @@ class AppointmentsNotifier extends StateNotifier<AsyncValue<List<AppointmentNote
     _load();
   }
 
-  final StorageService _storage;
+  final IStorageService _storage;
 
   Future<void> _load() async {
     try {

@@ -1,8 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'dart:io';
+
 import '../providers/appointment_provider.dart';
+import '../providers/sync_provider.dart';
 import '../providers/theme_provider.dart';
+import '../services/cloud_sync/cloud_sync_adapter.dart';
+import '../services/cloud_sync/cloud_sync_service.dart';
+import '../services/cloud_sync_storage_service.dart';
 import '../services/export_service.dart';
 import '../providers/dose_provider.dart';
 import '../providers/flare_up_provider.dart';
@@ -73,6 +79,8 @@ class SettingsScreen extends ConsumerWidget {
             onTap: () => _confirmWipeData(context, ref),
           ),
           const Divider(),
+          _CloudSyncSection(),
+          const Divider(),
           const ListTile(
             leading: Icon(Icons.cloud),
             title: Text('Backup'),
@@ -121,6 +129,9 @@ class SettingsScreen extends ConsumerWidget {
       // Wipe all data from storage
       final storage = ref.read(storageServiceProvider);
       await storage.wipeAllData();
+      
+      // Update notification service if storage changed
+      NotificationService.setStorage(storage);
 
       // Refresh all providers to reflect empty state
       ref.invalidate(medicinesProvider);
@@ -211,5 +222,265 @@ class _WipeDataConfirmationDialogState
         ),
       ],
     );
+  }
+}
+
+class _CloudSyncSection extends ConsumerStatefulWidget {
+  const _CloudSyncSection();
+
+  @override
+  ConsumerState<_CloudSyncSection> createState() => _CloudSyncSectionState();
+}
+
+class _CloudSyncSectionState extends ConsumerState<_CloudSyncSection> {
+  bool _isInitializing = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final syncEnabled = ref.watch(syncEnabledProvider);
+    final syncStatus = ref.watch(syncStatusProvider);
+    final storage = ref.watch(storageServiceProvider);
+    final cloudAdapter = ref.watch(cloudSyncAdapterProvider);
+
+    final platformName = Platform.isIOS ? 'iCloud Drive' : 'Google Drive';
+    final platformIcon = Platform.isIOS ? Icons.cloud : Icons.cloud_queue;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SwitchListTile(
+          secondary: Icon(platformIcon),
+          title: Text('Sync with $platformName'),
+          subtitle: Text(
+            syncEnabled
+                ? 'Your data syncs across devices'
+                : 'Enable to sync your data across devices',
+          ),
+          value: syncEnabled,
+          onChanged: _isInitializing
+              ? null
+              : (value) async {
+                  await _handleSyncToggle(context, ref, value, storage);
+                },
+        ),
+        if (syncEnabled) ...[
+          const SizedBox(height: 8),
+          if (cloudAdapter != null) ...[
+            FutureBuilder<bool>(
+              future: cloudAdapter.isSignedIn(),
+              builder: (context, snapshot) {
+                if (snapshot.data == false) {
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (Platform.isAndroid)
+                          FilledButton.icon(
+                            onPressed: _isInitializing
+                                ? null
+                                : () async {
+                                    await _handleSignIn(context, ref, cloudAdapter);
+                                  },
+                            icon: const Icon(Icons.login),
+                            label: const Text('Sign in to Google Drive'),
+                          ),
+                        if (Platform.isIOS)
+                          Text(
+                            'Sign in to iCloud in Settings to enable sync',
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                      ],
+                    ),
+                  );
+                }
+                return const SizedBox.shrink();
+              },
+            ),
+          ],
+          if (syncStatus == SyncStatus.syncing)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Row(
+                children: [
+                  const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Syncing...',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+              ),
+            ),
+          if (syncStatus == SyncStatus.error)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Text(
+                'Sync error. Please try again.',
+                style: Theme.of(context)
+                    .textTheme
+                    .bodySmall
+                    ?.copyWith(color: Colors.red),
+              ),
+            ),
+        ],
+      ],
+    );
+  }
+
+  Future<void> _handleSyncToggle(
+    BuildContext context,
+    WidgetRef ref,
+    bool enabled,
+    IStorageService storage,
+  ) async {
+    setState(() => _isInitializing = true);
+    ref.read(syncStatusProvider.notifier).state = SyncStatus.syncing;
+
+    try {
+      await storage.setCloudSyncEnabled(enabled);
+
+      if (enabled) {
+        // Initialize cloud sync
+        try {
+          final cloudAdapter = CloudSyncService.createAdapter();
+          await cloudAdapter.init();
+
+          // Check if signed in (for Android) or available (for iOS)
+          final isSignedIn = await cloudAdapter.isSignedIn();
+          final isAvailable = await cloudAdapter.isAvailable();
+
+          if (!isSignedIn && !isAvailable) {
+            // Need to sign in
+            if (Platform.isAndroid) {
+              await cloudAdapter.signIn();
+            } else {
+              // iOS - user needs to sign in via Settings
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text(
+                      'Please sign in to iCloud in Settings to enable sync',
+                    ),
+                  ),
+                );
+              }
+            }
+          }
+
+          // Create cloud sync storage service
+          final localStorage = storage as LocalStorageService;
+          final cloudSyncStorage = CloudSyncStorageService(
+            localStorage,
+            cloudAdapter,
+          );
+          await cloudSyncStorage.init();
+
+          // Update provider
+          ref.read(storageServiceProvider.notifier).updateStorage(cloudSyncStorage);
+          
+          // Update notification service
+          NotificationService.setStorage(cloudSyncStorage);
+
+          ref.read(syncStatusProvider.notifier).state = SyncStatus.idle;
+        } catch (e) {
+          // Failed to initialize cloud sync
+          await storage.setCloudSyncEnabled(false);
+          ref.read(syncStatusProvider.notifier).state = SyncStatus.error;
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Failed to enable sync: $e'),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+        }
+      } else {
+        // Disable sync - sign out from cloud
+        final cloudAdapter = ref.read(cloudSyncAdapterProvider);
+        if (cloudAdapter != null) {
+          try {
+            await cloudAdapter.signOut();
+          } catch (_) {
+            // Ignore sign-out errors
+          }
+        }
+
+        // Switch back to local storage
+        final localStorage = storage is CloudSyncStorageService
+            ? (storage as CloudSyncStorageService).localStorage
+            : storage as LocalStorageService;
+
+        ref.read(storageServiceProvider.notifier).updateStorage(localStorage);
+        
+        // Update notification service
+        NotificationService.setStorage(localStorage);
+        
+        ref.read(syncStatusProvider.notifier).state = SyncStatus.idle;
+      }
+    } catch (e) {
+      ref.read(syncStatusProvider.notifier).state = SyncStatus.error;
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      setState(() => _isInitializing = false);
+    }
+  }
+
+  Future<void> _handleSignIn(
+    BuildContext context,
+    WidgetRef ref,
+    ICloudSyncAdapter adapter,
+  ) async {
+    setState(() => _isInitializing = true);
+    ref.read(syncStatusProvider.notifier).state = SyncStatus.syncing;
+
+    try {
+      await adapter.signIn();
+      ref.read(syncStatusProvider.notifier).state = SyncStatus.idle;
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Signed in successfully')),
+        );
+      }
+
+      // Refresh the storage service to use cloud sync
+      final storage = ref.read(storageServiceProvider);
+      if (storage is LocalStorageService) {
+        final cloudSyncStorage = CloudSyncStorageService(
+          storage,
+          adapter,
+        );
+        await cloudSyncStorage.init();
+        ref.read(storageServiceProvider.notifier).updateStorage(cloudSyncStorage);
+        
+        // Update notification service
+        NotificationService.setStorage(cloudSyncStorage);
+      }
+    } catch (e) {
+      ref.read(syncStatusProvider.notifier).state = SyncStatus.error;
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Sign-in failed: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      setState(() => _isInitializing = false);
+    }
   }
 }

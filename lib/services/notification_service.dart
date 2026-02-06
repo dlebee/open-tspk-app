@@ -10,11 +10,11 @@ import 'storage_service.dart';
 
 class NotificationService {
   static final _plugin = FlutterLocalNotificationsPlugin();
-  static StorageService? _storage;
+  static IStorageService? _storage;
   static void Function(String medicineId, String eye, String scheduledDate, String scheduledTime)? _onOverrideTimeRequested;
   static void Function()? _onDoseAdded;
 
-  static void setStorage(StorageService storage) {
+  static void setStorage(IStorageService storage) {
     _storage = storage;
   }
 

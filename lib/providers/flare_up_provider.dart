@@ -14,7 +14,7 @@ class FlareUpsNotifier extends StateNotifier<AsyncValue<List<FlareUp>>> {
     _load();
   }
 
-  final StorageService _storage;
+  final IStorageService _storage;
 
   Future<void> _load() async {
     try {

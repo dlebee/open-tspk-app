@@ -17,7 +17,7 @@ class MedicinesNotifier extends StateNotifier<AsyncValue<List<Medicine>>> {
     _load();
   }
 
-  final StorageService _storage;
+  final IStorageService _storage;
 
   Future<void> _load() async {
     try {

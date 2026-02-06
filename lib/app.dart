@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'providers/dose_provider.dart';
+import 'providers/storage_provider.dart';
 import 'providers/theme_provider.dart';
 import 'services/notification_service.dart';
 import 'screens/activity_log_screen.dart';
@@ -15,11 +16,26 @@ import 'screens/settings_screen.dart';
 
 import 'navigation_keys.dart';
 
-class ThygesonApp extends ConsumerWidget {
+class ThygesonApp extends ConsumerStatefulWidget {
   const ThygesonApp({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ThygesonApp> createState() => _ThygesonAppState();
+}
+
+class _ThygesonAppState extends ConsumerState<ThygesonApp> {
+  @override
+  void initState() {
+    super.initState();
+    // Set up notification service after first frame
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final storage = ref.read(storageServiceProvider);
+      NotificationService.setStorage(storage);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     NotificationService.setOnDoseAdded(() {
       ref.read(dosesProvider.notifier).refresh();
     });

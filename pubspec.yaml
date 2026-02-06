@@ -40,6 +40,9 @@ dependencies:
   path_provider: ^2.1.5
   share_plus: ^10.1.4
   intl: ^0.20.2
+  google_sign_in: ^6.2.1
+  googleapis: ^13.1.0
+  http: ^1.2.2
 
 dev_dependencies:
   flutter_test:
