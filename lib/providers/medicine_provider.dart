@@ -23,28 +23,27 @@ class MedicinesNotifier extends StateNotifier<AsyncValue<List<Medicine>>> {
     try {
       final list = _storage.getMedicines();
       state = AsyncValue.data(list);
-      // Schedule notifications for all medicines when loading
-      // This is necessary on initial load to ensure notifications are set up
+      // Reschedule notifications once on initial load (cancel all + recreate).
       if (list.isNotEmpty) {
         print('[MedicineProvider] Initial load: scheduling notifications for ${list.length} medicine(s)');
-        _scheduleAllNotificationsInBackground(list);
+        _rescheduleAllNotificationsInBackground(list);
       }
     } catch (e, st) {
       state = AsyncValue.error(e, st);
     }
   }
 
-  void _scheduleAllNotificationsInBackground(List<Medicine> medicines) {
+  void _rescheduleAllNotificationsInBackground(List<Medicine> medicines) {
     print('[MedicineProvider] Scheduling notifications for ${medicines.length} medicine(s) in background');
     Future.microtask(() async {
-      for (final medicine in medicines) {
-        try {
-          await NotificationService.scheduleForMedicine(medicine);
-        } catch (e, stackTrace) {
-          // Log error but continue with other medicines
-          print('[MedicineProvider] ✗ Failed to schedule notifications for medicine ${medicine.id}: $e');
-          print('[MedicineProvider] Stack trace: $stackTrace');
-        }
+      try {
+        await NotificationService.rescheduleAllNotifications(
+          storage: _storage,
+          medicines: medicines,
+        );
+      } catch (e, stackTrace) {
+        print('[MedicineProvider] ✗ Failed to reschedule notifications on initial load: $e');
+        print('[MedicineProvider] Stack trace: $stackTrace');
       }
       print('[MedicineProvider] Completed background notification scheduling');
     });
@@ -55,7 +54,7 @@ class MedicinesNotifier extends StateNotifier<AsyncValue<List<Medicine>>> {
     final updated = [...list, medicine];
     await _storage.saveMedicines(updated);
     state = AsyncValue.data(updated);
-    _scheduleNotificationsInBackground(medicine);
+    _rescheduleAllNotificationsInBackground(updated);
   }
 
   /// Check if schedules changed between two medicines
@@ -121,40 +120,23 @@ class MedicinesNotifier extends StateNotifier<AsyncValue<List<Medicine>>> {
     // Only reschedule notifications if schedules actually changed
     if (schedulesChanged) {
       print('[MedicineProvider] Schedules changed for medicine ${medicine.name}, rescheduling notifications');
-      _scheduleNotificationsInBackground(medicine);
+      _rescheduleAllNotificationsInBackground(updated);
     } else {
       print('[MedicineProvider] Schedules unchanged for medicine ${medicine.name}, skipping notification rescheduling');
     }
   }
 
-  void _scheduleNotificationsInBackground(Medicine medicine) {
-    print('[MedicineProvider] Scheduling notifications for medicine: ${medicine.name} (ID: ${medicine.id})');
-    Future.microtask(() async {
-      try {
-        await NotificationService.scheduleForMedicine(medicine);
-      } catch (e, stackTrace) {
-        // Log error for debugging - notifications may fail on some platforms (e.g. macOS)
-        print('[MedicineProvider] ✗ Failed to schedule notifications for medicine ${medicine.id}: $e');
-        print('[MedicineProvider] Stack trace: $stackTrace');
-      }
-    });
-  }
-
   Future<void> delete(String id) async {
     final list = state.valueOrNull ?? [];
-    // Get the medicine before deleting it so we can cancel its notifications efficiently
-    final medicine = list.firstWhere((m) => m.id == id, orElse: () => Medicine(name: '', schedules: [], createdAt: DateTime.now()));
     final updated = list.where((m) => m.id != id).toList();
     await _storage.saveMedicines(updated);
     state = AsyncValue.data(updated);
     Future.microtask(() async {
       try {
-        // Pass the medicine object if we found it, so cancellation is more efficient
-        if (medicine.id.isNotEmpty) {
-          await NotificationService.cancelForMedicine(id, medicine: medicine);
-        } else {
-          await NotificationService.cancelForMedicine(id);
-        }
+        await NotificationService.rescheduleAllNotifications(
+          storage: _storage,
+          medicines: updated,
+        );
       } catch (_) {
         // Notification cancel may fail on some platforms (e.g. macOS)
       }

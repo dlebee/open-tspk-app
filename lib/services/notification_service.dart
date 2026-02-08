@@ -34,6 +34,7 @@ class NotificationService {
   static void Function(String medicineId, String eye, String scheduledDate, String scheduledTime)? _onOverrideTimeRequested;
   static void Function()? _onDoseAdded;
   static void Function(String medicineId, String scheduleId, String eye, String scheduledDate, String scheduledTime)? _onNotificationTapped;
+  static NotificationResponse? _pendingNotificationResponse;
   
   // Track notification ID assignments for cancellation
   // Key: 'medicineId|scheduleId|dayOfWeek|timeIndex|offset'
@@ -44,10 +45,13 @@ class NotificationService {
 
   static void setStorage(IStorageService storage) {
     _storage = storage;
+    // If we were launched from a notification before storage existed, handle it now.
+    Future.microtask(_tryHandlePendingNotificationResponse);
   }
 
   static void setOnOverrideTimeRequested(void Function(String, String, String, String) fn) {
     _onOverrideTimeRequested = fn;
+    Future.microtask(_tryHandlePendingNotificationResponse);
   }
 
   static void setOnDoseAdded(void Function() fn) {
@@ -56,6 +60,40 @@ class NotificationService {
 
   static void setOnNotificationTapped(void Function(String medicineId, String scheduleId, String eye, String scheduledDate, String scheduledTime) fn) {
     _onNotificationTapped = fn;
+    // If we were launched from a notification before handlers existed, handle it now.
+    Future.microtask(_tryHandlePendingNotificationResponse);
+  }
+
+  /// Background handler for notification taps/actions.
+  /// Needed for action presses while app is terminated/backgrounded.
+  /// Note: keep this handler synchronous (no awaits).
+  @pragma('vm:entry-point')
+  static void _onBackgroundNotificationResponse(NotificationResponse response) {
+    try {
+      _debugLog('notification_service.dart:_onBackgroundNotificationResponse', 'Background notification response', {
+        'actionId': response.actionId,
+        'notificationId': response.id,
+        'payload': response.payload,
+        'input': response.input,
+      });
+      // Also print in case logs are visible.
+      // (On some platforms/background states, stdout may not show.)
+      // ignore: avoid_print
+      print('[NotificationService] (background) notification response: actionId=${response.actionId}, id=${response.id}, payload=${response.payload}');
+    } catch (_) {
+      // Never throw from a background entrypoint.
+    }
+  }
+
+  static Future<void> _tryHandlePendingNotificationResponse() async {
+    final pending = _pendingNotificationResponse;
+    if (pending == null) return;
+
+    // Attempt handling; if it still can't be handled, we keep it pending.
+    final handled = await _handleNotificationResponse(pending, allowQueueing: true);
+    if (handled) {
+      _pendingNotificationResponse = null;
+    }
   }
 
   static Future<void> init() async {
@@ -110,7 +148,6 @@ class NotificationService {
       
       const android = AndroidInitializationSettings('@mipmap/ic_launcher');
       // Configure iOS to show notifications even when app is in foreground
-      // Register notification categories with action buttons for iOS
       final ios = DarwinInitializationSettings(
         requestAlertPermission: true,
         requestBadgePermission: true,
@@ -120,30 +157,27 @@ class NotificationService {
         defaultPresentBadge: true, // Update badge when app is in foreground
         defaultPresentBanner: true, // Show banner when app is in foreground (iOS 15+)
         defaultPresentList: true, // Show in notification center when app is in foreground
-        notificationCategories: [
-          DarwinNotificationCategory(
-            'thygeson_meds',
-            actions: <DarwinNotificationAction>[
-              DarwinNotificationAction.plain('skip', 'Skip'),
-              DarwinNotificationAction.plain('taken_on_time', 'Taken on time'),
-              DarwinNotificationAction.plain('taken_now', 'Taken now'),
-              DarwinNotificationAction.plain('taken_at_override', 'Taken at...', 
-                options: <DarwinNotificationActionOption>{
-                  DarwinNotificationActionOption.foreground,
-                },
-              ),
-            ],
-            options: <DarwinNotificationCategoryOption>{
-              DarwinNotificationCategoryOption.hiddenPreviewShowTitle,
-            },
-          ),
-        ],
       );
       final initialized = await _plugin.initialize(
         InitializationSettings(android: android, iOS: ios),
         onDidReceiveNotificationResponse: _onNotificationResponse,
+        onDidReceiveBackgroundNotificationResponse: _onBackgroundNotificationResponse,
       );
       print('[NotificationService] Plugin initialized: $initialized');
+      print('[NotificationService] Callback registered: _onNotificationResponse');
+      print('[NotificationService] Background callback registered: _onBackgroundNotificationResponse');
+
+      // Handle the case where the app is LAUNCHED from a notification tap/action.
+      // Without this, the callback may not fire for the initial launch on some platforms.
+      final launchDetails = await _plugin.getNotificationAppLaunchDetails();
+      if (launchDetails?.didNotificationLaunchApp ?? false) {
+        final launchResponse = launchDetails?.notificationResponse;
+        if (launchResponse != null) {
+          print('[NotificationService] App launched from notification. actionId=${launchResponse.actionId}, id=${launchResponse.id}');
+          // Defer handling until storage/handlers are ready (they are set after runApp()).
+          _pendingNotificationResponse = launchResponse;
+        }
+      }
       
       // Create notification channel for Android
       if (Platform.isAndroid) {
@@ -207,8 +241,34 @@ class NotificationService {
   }
 
   static Future<void> _onNotificationResponse(NotificationResponse response) async {
+    // Always keep the most recent response around until we've fully handled it.
+    _pendingNotificationResponse = response;
+    final handled = await _handleNotificationResponse(response, allowQueueing: true);
+    if (handled) {
+      // Only clear if we successfully processed it.
+      _pendingNotificationResponse = null;
+    }
+  }
+
+  static Future<bool> _handleNotificationResponse(
+    NotificationResponse response, {
+    required bool allowQueueing,
+  }) async {
+    print('[NotificationService] ========================================');
+    print('[NotificationService] 📱 NOTIFICATION RESPONSE CALLBACK CALLED!');
+    print('[NotificationService] ========================================');
+    print('[NotificationService] actionId: ${response.actionId}');
+    print('[NotificationService] notificationId: ${response.id}');
+    print('[NotificationService] payload: ${response.payload}');
+    print('[NotificationService] input: ${response.input}');
+    print('[NotificationService] ========================================');
+    
     final payload = response.payload;
-    if (payload == null || _storage == null) return;
+    if (payload == null) {
+      print('[NotificationService] ⚠️ No payload in notification response');
+      return false;
+    }
+    
     try {
       final map = jsonDecode(payload) as Map<String, dynamic>;
       final medicineId = map['medicineId'] as String?;
@@ -216,34 +276,46 @@ class NotificationService {
       final eyeStr = map['eye'] as String?;
       final scheduledDate = map['scheduledDate'] as String?;
       final scheduledTime = map['scheduledTime'] as String?;
-      if (medicineId == null || scheduleId == null || eyeStr == null || scheduledDate == null || scheduledTime == null) return;
+      
+      if (medicineId == null || scheduleId == null || eyeStr == null || scheduledDate == null || scheduledTime == null) {
+        print('[NotificationService] ⚠️ Missing required fields in payload: medicineId=$medicineId, scheduleId=$scheduleId, eye=$eyeStr, date=$scheduledDate, time=$scheduledTime');
+        return false;
+      }
 
       final eye = Eye.values.firstWhere((e) => e.name == eyeStr, orElse: () => Eye.both);
       final scheduledDt = DateTime.parse(scheduledDate);
 
-      // Handle notification tap (no action button pressed)
-      if (response.actionId == null || response.actionId == '') {
-        _onNotificationTapped?.call(medicineId, scheduleId, eyeStr, scheduledDate, scheduledTime);
-        return;
+      // Handle notification tap (only action we support now)
+      print('[NotificationService] 📱 Notification tapped: medicineId=$medicineId, scheduleId=$scheduleId, eye=$eyeStr, date=$scheduledDate, time=$scheduledTime');
+      _debugLog('notification_service.dart:_onNotificationResponse', 'Notification tapped', {
+        'medicineId': medicineId,
+        'scheduleId': scheduleId,
+        'eye': eyeStr,
+        'scheduledDate': scheduledDate,
+        'scheduledTime': scheduledTime,
+        'actionId': response.actionId ?? 'tap',
+        'notificationId': response.id,
+      });
+      
+      if (_onNotificationTapped == null) {
+        print('[NotificationService] ⚠️ Tap handler not set yet; will handle after app finishes booting.');
+        return allowQueueing;
       }
-
-      switch (response.actionId) {
-        case 'skip':
-          await _addDose(medicineId, eye, scheduledDt, scheduledTime, DoseStatus.skipped, null);
-          break;
-        case 'taken_on_time':
-          final takenAt = DateTime(scheduledDt.year, scheduledDt.month, scheduledDt.day,
-              int.parse(scheduledTime.split(':')[0]), int.parse(scheduledTime.split(':')[1]));
-          await _addDose(medicineId, eye, scheduledDt, scheduledTime, DoseStatus.taken, takenAt);
-          break;
-        case 'taken_now':
-          await _addDose(medicineId, eye, scheduledDt, scheduledTime, DoseStatus.taken, DateTime.now());
-          break;
-        case 'taken_at_override':
-          _onOverrideTimeRequested?.call(medicineId, eyeStr, scheduledDate, scheduledTime);
-          break;
-      }
-    } catch (_) {}
+      
+      _onNotificationTapped?.call(medicineId, scheduleId, eyeStr, scheduledDate, scheduledTime);
+      return true;
+    } catch (e, stackTrace) {
+      print('[NotificationService] ✗ ERROR handling notification response: $e');
+      print('[NotificationService] Stack trace: $stackTrace');
+      print('[NotificationService] Response details: actionId=${response.actionId}, id=${response.id}, payload=${response.payload}');
+      _debugLog('notification_service.dart:_onNotificationResponse', 'Error handling notification response', {
+        'error': e.toString(),
+        'actionId': response.actionId,
+        'notificationId': response.id,
+        'payload': response.payload,
+      });
+      return false;
+    }
   }
 
   static Future<void> _addDose(String medicineId, Eye eye, DateTime scheduledDate, String scheduledTime, DoseStatus status, DateTime? takenAt) async {
@@ -254,8 +326,8 @@ class NotificationService {
     final medicines = storage.getMedicines();
     final medicine = medicines.firstWhere((m) => m.id == medicineId, orElse: () => Medicine(name: 'Unknown', schedules: [], createdAt: DateTime.now()));
     
-    // Reschedule all notifications (cancel all and recreate from scratch)
-    await rescheduleAllNotifications();
+    // Reschedule all notifications (cancel all + recreate) when a dose is logged
+    await rescheduleAllNotifications(storage: storage);
     
     // For skipped doses, use scheduled date/time as recordedAt
     // For taken doses, use DateTime.now() as recordedAt
@@ -709,18 +781,11 @@ class NotificationService {
                         priority: Priority.high,
                         playSound: true,
                         enableVibration: true,
-                        actions: [
-                          const AndroidNotificationAction('skip', 'Skip'),
-                          const AndroidNotificationAction('taken_on_time', 'Taken on time'),
-                          const AndroidNotificationAction('taken_now', 'Taken now'),
-                          const AndroidNotificationAction('taken_at_override', 'Taken at...'),
-                        ],
                       ),
                       iOS: const DarwinNotificationDetails(
                         presentAlert: true,
                         presentBadge: true,
                         presentSound: true,
-                        categoryIdentifier: 'thygeson_meds',
                       ),
                     ),
                     androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
@@ -763,16 +828,25 @@ class NotificationService {
   /// Schedule notifications for a medicine.
   /// Always reschedules ALL notifications (cancel all + recreate) for simplicity and consistency.
   /// This ensures no duplicates and handles all edge cases (adding medicine, updating schedules, etc.).
-  static Future<void> scheduleForMedicine(Medicine medicine) async {
+  static Future<void> scheduleForMedicine(
+    Medicine medicine, {
+    IStorageService? storage,
+    List<Medicine>? medicines,
+  }) async {
     print('[NotificationService] Rescheduling all notifications (medicine ${medicine.id} was added/modified)');
-    await rescheduleAllNotifications();
+    await rescheduleAllNotifications(storage: storage, medicines: medicines);
   }
 
   /// Cancel notifications for a medicine.
   /// Always reschedules ALL notifications (cancel all + recreate) for simplicity and consistency.
-  static Future<void> cancelForMedicine(String medicineId, {Medicine? medicine}) async {
+  static Future<void> cancelForMedicine(
+    String medicineId, {
+    Medicine? medicine,
+    IStorageService? storage,
+    List<Medicine>? medicines,
+  }) async {
     print('[NotificationService] Rescheduling all notifications (medicine $medicineId was deleted/modified)');
-    await rescheduleAllNotifications();
+    await rescheduleAllNotifications(storage: storage, medicines: medicines);
   }
 
   static Future<void> cancelAll() async {
@@ -793,15 +867,25 @@ class NotificationService {
   
   /// Cancel notifications for a specific schedule.
   /// Always reschedules ALL notifications (cancel all + recreate) for simplicity and consistency.
-  static Future<void> cancelForSchedule(String medicineId, DateTime scheduledDate, String scheduledTime, Eye eye) async {
+  static Future<void> cancelForSchedule(
+    String medicineId,
+    DateTime scheduledDate,
+    String scheduledTime,
+    Eye eye, {
+    IStorageService? storage,
+    List<Medicine>? medicines,
+  }) async {
     print('[NotificationService] Rescheduling all notifications (dose logged for medicine $medicineId)');
-    await rescheduleAllNotifications();
+    await rescheduleAllNotifications(storage: storage, medicines: medicines);
   }
   
   /// Reschedule notifications for all medicines (useful after app restart or to fix scheduling issues)
   /// Uses lock → cancel → schedule → save → unlock pattern.
   /// [storage] - Optional storage service to use. If not provided, uses the static storage.
-  static Future<void> rescheduleAllNotifications({IStorageService? storage}) async {
+  static Future<void> rescheduleAllNotifications({
+    IStorageService? storage,
+    List<Medicine>? medicines,
+  }) async {
     // Lock
     if (_reschedulingInProgress) {
       print('[NotificationService] ⚠️ Rescheduling already in progress, skipping');
@@ -835,18 +919,27 @@ class NotificationService {
     }
     
     try {
+      // Determine which medicines we will schedule.
+      // IMPORTANT: If called without an explicit storage (startup timing / storage not wired yet),
+      // we do NOT want to cancel everything and then discover 0 medicines.
+      final medicinesToSchedule = medicines ?? storageToUse.getMedicines();
+      print('[NotificationService] Rescheduling notifications for ${medicinesToSchedule.length} medicine(s)');
+
+      // If we were called without an explicit storage and we see no medicines, assume the system
+      // isn't fully wired yet (e.g. NotificationService.setStorage not called, or wrong instance)
+      // and avoid wiping existing scheduled notifications.
+      if (medicinesToSchedule.isEmpty && storage == null && medicines == null) {
+        print('[NotificationService] ⚠️ Medicines list is empty (no explicit storage provided). Skipping cancel+reschedule to avoid wiping notifications.');
+        return;
+      }
+
       // Cancel all old notifications
       await _plugin.cancelAll();
       _clearNotificationIdMappings();
       print('[NotificationService] Cancelled all old notifications');
       
-      // Schedule all notifications
-      final medicines = storageToUse.getMedicines();
-      print('[NotificationService] Rescheduling notifications for ${medicines.length} medicine(s)');
-      
-      if (medicines.isEmpty) {
+      if (medicinesToSchedule.isEmpty) {
         print('[NotificationService] No medicines found, nothing to schedule');
-        _reschedulingInProgress = false;
         return;
       }
       
@@ -856,17 +949,17 @@ class NotificationService {
       // Add delay between scheduling each medicine on iOS to avoid hitting system limits
       final delayBetweenMedicines = Platform.isIOS ? 500 : 100;
       
-      for (var i = 0; i < medicines.length; i++) {
-        final medicine = medicines[i];
+      for (var i = 0; i < medicinesToSchedule.length; i++) {
+        final medicine = medicinesToSchedule[i];
         try {
-          print('[NotificationService] Rescheduling medicine ${i + 1}/${medicines.length}: ${medicine.name} (ID: ${medicine.id})');
+          print('[NotificationService] Rescheduling medicine ${i + 1}/${medicinesToSchedule.length}: ${medicine.name} (ID: ${medicine.id})');
           await _scheduleForMedicineInternal(medicine, getNextIdInMemory);
           successCount++;
           print('[NotificationService] ✓ Successfully rescheduled ${medicine.name}');
           
           // Add delay between medicines on iOS to avoid hitting system limits
           // Skip delay after the last medicine
-          if (i < medicines.length - 1) {
+          if (i < medicinesToSchedule.length - 1) {
             await Future.delayed(Duration(milliseconds: delayBetweenMedicines));
           }
         } catch (e, stackTrace) {
@@ -874,7 +967,7 @@ class NotificationService {
           print('[NotificationService] ✗ Failed to reschedule medicine ${medicine.name} (ID: ${medicine.id}): $e');
           print('[NotificationService] Stack trace: $stackTrace');
           // Still add delay even on error to maintain spacing
-          if (i < medicines.length - 1) {
+          if (i < medicinesToSchedule.length - 1) {
             await Future.delayed(Duration(milliseconds: delayBetweenMedicines));
           }
         }
