@@ -34,6 +34,7 @@ class NotificationService {
   static void Function(String medicineId, String eye, String scheduledDate, String scheduledTime)? _onOverrideTimeRequested;
   static void Function()? _onDoseAdded;
   static void Function(String medicineId, String scheduleId, String eye, String scheduledDate, String scheduledTime)? _onNotificationTapped;
+  static NotificationResponse? _pendingLaunchNotification;
   
   // Track notification ID assignments for cancellation
   // Key: 'medicineId|scheduleId|dayOfWeek|timeIndex|offset'
@@ -56,6 +57,13 @@ class NotificationService {
 
   static void setOnNotificationTapped(void Function(String medicineId, String scheduleId, String eye, String scheduledDate, String scheduledTime) fn) {
     _onNotificationTapped = fn;
+    // If there's a pending launch notification, handle it now that callback is set
+    if (_pendingLaunchNotification != null) {
+      Future.microtask(() {
+        _onNotificationTap(_pendingLaunchNotification!);
+        _pendingLaunchNotification = null;
+      });
+    }
   }
 
   static Future<void> init() async {
@@ -200,8 +208,9 @@ class NotificationService {
             'input': launchResponse.input,
           });
           // #endregion
-          // Handle the tap (just log it)
-          _onNotificationTap(launchResponse);
+          // Store for later - will be handled once callback is set in app.dart
+          _pendingLaunchNotification = launchResponse;
+          print('[NotificationService] Stored launch notification for handling after app initialization');
         }
       }
       

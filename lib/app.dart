@@ -58,15 +58,32 @@ class _ThygesonAppState extends ConsumerState<ThygesonApp> {
       }
     });
     NotificationService.setOnNotificationTapped((medicineId, scheduleId, eyeStr, scheduledDate, scheduledTime) {
-      // Navigate to home screen first
-      _MainNavigatorState.navigateToHome();
-      
-      // Wait a moment for navigation to complete, then show dialog
-      Future.delayed(const Duration(milliseconds: 300), () {
-        final ctx = navigatorKey.currentContext;
-        if (ctx != null) {
-          _handleNotificationTap(ctx, ref, medicineId, scheduleId, eyeStr, scheduledDate, scheduledTime);
-        }
+      // Wait for the app to be fully ready (providers loaded, UI rendered)
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        // Navigate to home screen first
+        _MainNavigatorState.navigateToHome();
+        
+        // Wait a bit longer for navigation and providers to be ready
+        Future.delayed(const Duration(milliseconds: 500), () {
+          final ctx = navigatorKey.currentContext;
+          if (ctx != null) {
+            // Ensure providers are loaded before showing dialog
+            final medicines = ref.read(medicinesProvider).valueOrNull;
+            final doses = ref.read(dosesProvider).valueOrNull;
+            
+            if (medicines != null && doses != null) {
+              _handleNotificationTap(ctx, ref, medicineId, scheduleId, eyeStr, scheduledDate, scheduledTime);
+            } else {
+              // Providers not ready yet, wait a bit more
+              Future.delayed(const Duration(milliseconds: 500), () {
+                final ctx2 = navigatorKey.currentContext;
+                if (ctx2 != null) {
+                  _handleNotificationTap(ctx2, ref, medicineId, scheduleId, eyeStr, scheduledDate, scheduledTime);
+                }
+              });
+            }
+          }
+        });
       });
     });
     final highContrast = ref.watch(highContrastProvider);

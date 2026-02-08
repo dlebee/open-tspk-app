@@ -166,9 +166,14 @@ class _ScheduleCardState extends State<_ScheduleCard> {
                 ActionChip(
                   label: const Text('+ Time'),
                   onPressed: () async {
+                    // Default to current time + 1 minute for easy testing
+                    final now = DateTime.now();
+                    final oneMinuteLater = now.add(const Duration(minutes: 1));
+                    final initialTime = TimeOfDay(hour: oneMinuteLater.hour, minute: oneMinuteLater.minute);
+                    
                     final time = await showTimePicker(
                       context: context,
-                      initialTime: TimeOfDay.now(),
+                      initialTime: initialTime,
                     );
                     if (time != null) {
                       final str =
