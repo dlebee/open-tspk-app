@@ -254,8 +254,8 @@ class NotificationService {
     final medicines = storage.getMedicines();
     final medicine = medicines.firstWhere((m) => m.id == medicineId, orElse: () => Medicine(name: 'Unknown', schedules: [], createdAt: DateTime.now()));
     
-    // Cancel remaining notifications for this schedule
-    await _cancelForSchedule(medicineId, scheduledDate, scheduledTime, eye);
+    // Reschedule all notifications (cancel all and recreate from scratch)
+    await rescheduleAllNotifications();
     
     // For skipped doses, use scheduled date/time as recordedAt
     // For taken doses, use DateTime.now() as recordedAt
@@ -287,80 +287,6 @@ class NotificationService {
     _onDoseAdded?.call();
   }
   
-  /// Cancel all notifications for a specific schedule (all 3: 15min before, 10min before, at time)
-  static Future<void> _cancelForSchedule(String medicineId, DateTime scheduledDate, String scheduledTime, Eye eye) async {
-    print('[NotificationService] Cancelling notifications for schedule: medicineId=$medicineId, date=$scheduledDate, time=$scheduledTime, eye=$eye');
-    
-    final storage = _storage;
-    if (storage == null) {
-      print('[NotificationService] ✗ Storage not available, cannot cancel schedule');
-      return;
-    }
-    
-    final medicines = storage.getMedicines();
-    final medicineIndex = medicines.indexWhere((m) => m.id == medicineId);
-    if (medicineIndex == -1) {
-      print('[NotificationService] ✗ Medicine not found for ID: $medicineId');
-      return;
-    }
-    final medicine = medicines[medicineIndex];
-    
-    final parts = scheduledTime.split(':');
-    final hour = int.parse(parts[0]);
-    final minute = parts.length > 1 ? int.parse(parts[1]) : 0;
-    final scheduledWeekday = scheduledDate.weekday;
-    
-    print('[NotificationService] Looking for schedule matching: weekday=$scheduledWeekday, time=$scheduledTime, eye=$eye');
-    print('[NotificationService] Medicine has ${medicine.schedules.length} schedule(s)');
-    
-    // Find the matching schedule
-    bool found = false;
-    for (final schedule in medicine.schedules) {
-      print('[NotificationService] Checking schedule ${schedule.id}: eye=${schedule.eye.name}, days=${schedule.daysOfWeek}, times=${schedule.times}');
-      
-      if (schedule.eye != eye) {
-        print('[NotificationService] Eye mismatch (expected $eye, got ${schedule.eye.name}), skipping');
-        continue;
-      }
-      
-      // Check if this schedule has the matching time and day
-      if (schedule.daysOfWeek.contains(scheduledWeekday) && schedule.times.contains(scheduledTime)) {
-        final timeIndex = schedule.times.indexOf(scheduledTime);
-        
-        print('[NotificationService] Found matching schedule ${schedule.id}, time index $timeIndex');
-        print('[NotificationService] Cancelling 4 notifications (15min before, 10min before, 5min before, at time)');
-        
-        // Cancel all 4 notifications (0=at time, 1=5min before, 2=10min before, 3=15min before)
-        int cancelledCount = 0;
-        for (var offset = 0; offset < 4; offset++) {
-          final key = '$medicineId|${schedule.id}|$scheduledWeekday|$timeIndex|$offset';
-          final id = _notificationIdMap[key];
-          if (id != null) {
-            try {
-              await _plugin.cancel(id);
-              print('[NotificationService] ✓ Cancelled notification ID $id (offset=$offset)');
-              cancelledCount++;
-              // Remove from map after successful cancellation
-              _notificationIdMap.remove(key);
-            } catch (e) {
-              print('[NotificationService] Could not cancel notification ID $id: $e (may not exist)');
-            }
-          } else {
-            print('[NotificationService] No stored ID found for key: $key (may have been cancelled already)');
-          }
-        }
-        print('[NotificationService] Cancelled $cancelledCount notification(s) for this schedule');
-        found = true;
-        break;
-      } else {
-        print('[NotificationService] Schedule ${schedule.id} does not match (days match: ${schedule.daysOfWeek.contains(scheduledWeekday)}, times match: ${schedule.times.contains(scheduledTime)})');
-      }
-    }
-    
-    if (!found) {
-      print('[NotificationService] ✗ WARNING: No matching schedule found to cancel');
-    }
-  }
 
   /// Notification IDs must fit in 32-bit int (max: 2,147,483,647).
   /// Uses a simple incrementing counter that wraps back to 1 when it reaches the maximum.
@@ -402,12 +328,13 @@ class NotificationService {
   /// Get or assign a notification ID for a specific notification.
   /// Uses incrementing counter and tracks assignments for cancellation.
   /// Always generates a new ID - the map is used for tracking, not for reusing IDs.
-  static Future<int> _getId(String medicineId, String scheduleId, int dayOfWeek, int timeIndex, int notificationOffset) async {
+  /// This version uses an in-memory counter that must be initialized first.
+  static int _getIdInMemory(String medicineId, String scheduleId, int dayOfWeek, int timeIndex, int notificationOffset, int Function() getNextId) {
     final key = '$medicineId|$scheduleId|$dayOfWeek|$timeIndex|$notificationOffset';
     
     // Always generate a new ID to ensure uniqueness
     // The map is used for tracking which ID is assigned to which notification for cancellation
-    final id = await _getNextNotificationId();
+    final id = getNextId();
     _notificationIdMap[key] = id;
     return id;
   }
@@ -488,30 +415,26 @@ class NotificationService {
 
   // Track which notification IDs we're about to schedule to detect duplicates
   static final Set<int> _schedulingIds = <int>{};
+  // Lock to prevent concurrent rescheduling operations
+  static bool _reschedulingInProgress = false;
   
-  static Future<void> scheduleForMedicine(Medicine medicine) async {
+  /// Internal method to schedule notifications for a single medicine.
+  /// Assumes caller has already locked, cancelled all notifications, and loaded the notification ID counter.
+  static Future<void> _scheduleForMedicineInternal(
+    Medicine medicine,
+    int Function() getNextIdInMemory,
+  ) async {
     print('[NotificationService] Scheduling notifications for medicine: ${medicine.name} (ID: ${medicine.id})');
     print('[NotificationService] Medicine has ${medicine.schedules.length} schedule(s)');
     
-    try {
-      // Cancel existing notifications first and wait for completion
-      await cancelForMedicine(medicine.id, medicine: medicine);
-      print('[NotificationService] Cancelled existing notifications for medicine ${medicine.id}');
-      
-      // Clear notification ID mappings for this medicine to ensure fresh IDs
-      _notificationIdMap.removeWhere((key, _) => key.startsWith('${medicine.id}|'));
-      
-      // Delay to ensure cancellation completes before scheduling
-      // Use longer delay on iOS to avoid hitting system limits
-      final delayMs = Platform.isIOS ? 750 : 100;
-      await Future.delayed(Duration(milliseconds: delayMs));
-      print('[NotificationService] Waited ${delayMs}ms after cancellation before rescheduling (iOS: ${Platform.isIOS})');
-      
-      int totalNotificationsScheduled = 0;
-      int totalNotificationsFailed = 0;
-      final Set<int> scheduledIds = <int>{}; // Track IDs scheduled in this call
-      
-      for (final schedule in medicine.schedules) {
+    int totalNotificationsScheduled = 0;
+    int totalNotificationsFailed = 0;
+    final Set<int> scheduledIds = <int>{}; // Track IDs scheduled in this call
+    
+    // Clear notification ID mappings for this medicine to ensure fresh IDs
+    _notificationIdMap.removeWhere((key, _) => key.startsWith('${medicine.id}|'));
+    
+    for (final schedule in medicine.schedules) {
         print('[NotificationService] Processing schedule ${schedule.id}: eye=${schedule.eye.name}, days=${schedule.daysOfWeek}, times=${schedule.times}');
         
         for (final dayOfWeek in schedule.daysOfWeek) {
@@ -696,7 +619,9 @@ class NotificationService {
                 });
                 // #endregion
                 
-                final id = await _getId(medicine.id, schedule.id, dayOfWeek, ti, offset);
+                final id = getNextIdInMemory();
+                final key = '${medicine.id}|${schedule.id}|$dayOfWeek|$ti|$offset';
+                _notificationIdMap[key] = id;
                 
                 // Skip this notification if it's already in the past (using local time comparison)
                 final notificationTimeDiff = notificationTimeLocal.difference(systemNow);
@@ -833,124 +758,21 @@ class NotificationService {
       print('[NotificationService]   - Successfully scheduled: $totalNotificationsScheduled');
       print('[NotificationService]   - Failed: $totalNotificationsFailed');
       print('[NotificationService]   - Unique IDs scheduled: ${scheduledIds.length}');
-      
-      // Check iOS 64 pending notification limit
-      if (Platform.isIOS) {
-        try {
-          final pending = await _plugin.pendingNotificationRequests();
-          print('[NotificationService] iOS pending notifications: ${pending.length}/64');
-          if (pending.length > 64) {
-            print('[NotificationService] ⚠️ WARNING: iOS has a limit of 64 pending notifications.');
-            print('[NotificationService]   You have ${pending.length} scheduled. iOS will silently drop the extras (keeps the 64 soonest).');
-            print('[NotificationService]   Consider reducing notification frequency or number of medicines.');
-          } else if (pending.length > 50) {
-            print('[NotificationService] ⚠️ NOTICE: Approaching iOS 64 notification limit (${pending.length}/64).');
-          }
-        } catch (e) {
-          print('[NotificationService] Could not check pending notification count: $e');
-        }
-      }
-    } catch (e, stackTrace) {
-      // Clean up tracking on error - remove all IDs for this medicine
-      // Clear notification ID mappings for this medicine (which will also clear associated scheduling IDs)
-      final keysToRemove = <String>[];
-      for (final entry in _notificationIdMap.entries) {
-        if (entry.key.startsWith('${medicine.id}|')) {
-          keysToRemove.add(entry.key);
-          // Also remove from scheduling set if present
-          _schedulingIds.remove(entry.value);
-        }
-      }
-      for (final key in keysToRemove) {
-        _notificationIdMap.remove(key);
-      }
-      print('[NotificationService] ✗ FATAL ERROR scheduling notifications for medicine ${medicine.name}: $e');
-      print('[NotificationService] Stack trace: $stackTrace');
-      rethrow;
-    }
   }
 
+  /// Schedule notifications for a medicine.
+  /// Always reschedules ALL notifications (cancel all + recreate) for simplicity and consistency.
+  /// This ensures no duplicates and handles all edge cases (adding medicine, updating schedules, etc.).
+  static Future<void> scheduleForMedicine(Medicine medicine) async {
+    print('[NotificationService] Rescheduling all notifications (medicine ${medicine.id} was added/modified)');
+    await rescheduleAllNotifications();
+  }
+
+  /// Cancel notifications for a medicine.
+  /// Always reschedules ALL notifications (cancel all + recreate) for simplicity and consistency.
   static Future<void> cancelForMedicine(String medicineId, {Medicine? medicine}) async {
-    print('[NotificationService] Cancelling notifications for medicine ID: $medicineId');
-    try {
-      int cancelledCount = 0;
-      int attemptedCount = 0;
-      
-      // If we have the medicine object, only cancel IDs that could actually exist
-      if (medicine != null) {
-        print('[NotificationService] Using medicine schedules to cancel only relevant notifications');
-        
-        // Calculate total notifications to cancel for progress tracking
-        int totalToCancel = 0;
-        for (final schedule in medicine.schedules) {
-          totalToCancel += schedule.daysOfWeek.length * schedule.times.length * 4; // 4 notifications per schedule
-        }
-        print('[NotificationService] Will attempt to cancel up to $totalToCancel notification(s)');
-        
-        for (final schedule in medicine.schedules) {
-          for (final dayOfWeek in schedule.daysOfWeek) {
-            for (var ti = 0; ti < schedule.times.length; ti++) {
-              // Cancel all 4 notifications for this schedule (15min, 10min, 5min before, and at time)
-              for (var offset = 0; offset < 4; offset++) {
-                final key = '$medicineId|${schedule.id}|$dayOfWeek|$ti|$offset';
-                final id = _notificationIdMap[key];
-                if (id != null) {
-                  attemptedCount++;
-                  try {
-                    await _plugin.cancel(id);
-                    cancelledCount++;
-                    // Remove from map after successful cancellation
-                    _notificationIdMap.remove(key);
-                  } catch (e) {
-                    // Ignore errors when cancelling (notification may not exist)
-                  }
-                  
-                  // Throttle to avoid Android rate limits (5 cancellations per second)
-                  // Delay 250ms after each cancellation to stay well under the limit
-                  // Skip delay only on the very last cancellation
-                  if (attemptedCount < totalToCancel) {
-                    await Future.delayed(const Duration(milliseconds: 250));
-                  }
-                }
-              }
-            }
-          }
-        }
-        print('[NotificationService] Cancelled $cancelledCount notification(s) (attempted $attemptedCount IDs based on medicine schedules)');
-      } else {
-        // Fallback: cancel all possible IDs, but with throttling to avoid rate limits
-        print('[NotificationService] WARNING: Medicine object not provided, using fallback cancellation (may be slow)');
-        print('[NotificationService] This will attempt to cancel up to ${100 * 7 * 100 * 4} potential IDs');
-        
-        // Fallback: cancel all notifications for this medicine from our ID map
-        // This is less efficient but works when we don't have the medicine object
-        final keysToCancel = _notificationIdMap.entries
-            .where((entry) => entry.key.startsWith('$medicineId|'))
-            .toList();
-        
-        for (final entry in keysToCancel) {
-          attemptedCount++;
-          try {
-            await _plugin.cancel(entry.value);
-            cancelledCount++;
-            _notificationIdMap.remove(entry.key);
-          } catch (e) {
-            // Ignore errors when cancelling (notification may not exist)
-          }
-          
-          // Throttle to avoid Android rate limits (5 cancellations per second)
-          // Delay 250ms after each cancellation to stay well under the limit
-          // Skip delay only on the very last cancellation
-          if (attemptedCount < keysToCancel.length) {
-            await Future.delayed(const Duration(milliseconds: 250));
-          }
-        }
-        print('[NotificationService] Cancelled $cancelledCount notification(s) (attempted $attemptedCount IDs with throttling)');
-      }
-    } catch (e, stackTrace) {
-      print('[NotificationService] ✗ ERROR cancelling notifications for medicine $medicineId: $e');
-      print('[NotificationService] Stack trace: $stackTrace');
-    }
+    print('[NotificationService] Rescheduling all notifications (medicine $medicineId was deleted/modified)');
+    await rescheduleAllNotifications();
   }
 
   static Future<void> cancelAll() async {
@@ -969,80 +791,114 @@ class NotificationService {
     await _addDose(medicineId, eye, scheduledDate, scheduledTime, DoseStatus.taken, takenAt);
   }
   
-  /// Public method to cancel notifications for a specific schedule when a dose is taken/skipped
-  /// This should be called when doses are added from outside the notification service
+  /// Cancel notifications for a specific schedule.
+  /// Always reschedules ALL notifications (cancel all + recreate) for simplicity and consistency.
   static Future<void> cancelForSchedule(String medicineId, DateTime scheduledDate, String scheduledTime, Eye eye) async {
-    await _cancelForSchedule(medicineId, scheduledDate, scheduledTime, eye);
+    print('[NotificationService] Rescheduling all notifications (dose logged for medicine $medicineId)');
+    await rescheduleAllNotifications();
   }
   
   /// Reschedule notifications for all medicines (useful after app restart or to fix scheduling issues)
+  /// Uses lock → cancel → schedule → save → unlock pattern.
   /// [storage] - Optional storage service to use. If not provided, uses the static storage.
   static Future<void> rescheduleAllNotifications({IStorageService? storage}) async {
-    print('[NotificationService] Rescheduling all notifications...');
+    // Lock
+    if (_reschedulingInProgress) {
+      print('[NotificationService] ⚠️ Rescheduling already in progress, skipping');
+      return;
+    }
+    _reschedulingInProgress = true;
+    
     final storageToUse = storage ?? _storage;
     if (storageToUse == null) {
       print('[NotificationService] ✗ ERROR: Storage service not set, cannot reschedule');
+      _reschedulingInProgress = false;
       return;
     }
     
-    print('[NotificationService] Using storage: ${storageToUse.runtimeType}');
-    
-    // Update static storage so scheduleForMedicine can read the latest preferences
-    // This ensures notification preferences are read from the correct storage instance
+    // Update static storage
     if (storage != null) {
       _storage = storageToUse;
-      print('[NotificationService] Updated static storage to use provided storage instance');
     }
     
-    // Don't cancel all at once - let each scheduleForMedicine handle its own cancellation
-    // This avoids potential iOS issues with cancelAll() and provides better control
-    // Clear notification ID mappings since we're rescheduling everything
-    // Old IDs will be cancelled and new ones will be assigned
-    _clearNotificationIdMappings();
+    const maxId = 2147483647;
+    int currentNotificationId = storageToUse.getNextNotificationId();
+    print('[NotificationService] Loaded notification ID counter: $currentNotificationId');
     
-    final medicines = storageToUse.getMedicines();
-    print('[NotificationService] Found ${medicines.length} medicine(s) to reschedule');
-    
-    if (medicines.isEmpty) {
-      print('[NotificationService] ⚠️ WARNING: No medicines found in storage. Cannot reschedule notifications.');
-      return;
+    int getNextIdInMemory() {
+      currentNotificationId++;
+      if (currentNotificationId > maxId) {
+        currentNotificationId = 1;
+        print('[NotificationService] Notification ID counter wrapped from $maxId back to 1');
+      }
+      return currentNotificationId - 1;
     }
     
-    int successCount = 0;
-    int failureCount = 0;
+    try {
+      // Cancel all old notifications
+      await _plugin.cancelAll();
+      _clearNotificationIdMappings();
+      print('[NotificationService] Cancelled all old notifications');
+      
+      // Schedule all notifications
+      final medicines = storageToUse.getMedicines();
+      print('[NotificationService] Rescheduling notifications for ${medicines.length} medicine(s)');
+      
+      if (medicines.isEmpty) {
+        print('[NotificationService] No medicines found, nothing to schedule');
+        _reschedulingInProgress = false;
+        return;
+      }
+      
+      int successCount = 0;
+      int failureCount = 0;
     
-    // Add delay between scheduling each medicine on iOS to avoid hitting system limits
-    final delayBetweenMedicines = Platform.isIOS ? 500 : 100;
-    
-    for (var i = 0; i < medicines.length; i++) {
-      final medicine = medicines[i];
-      try {
-        print('[NotificationService] Rescheduling medicine ${i + 1}/${medicines.length}: ${medicine.name} (ID: ${medicine.id})');
-        // scheduleForMedicine will cancel existing notifications for this medicine and reschedule
-        // It will use the updated _storage to read notification preferences
-        await scheduleForMedicine(medicine);
-        successCount++;
-        print('[NotificationService] ✓ Successfully rescheduled ${medicine.name}');
-        
-        // Add delay between medicines on iOS to avoid hitting system limits
-        // Skip delay after the last medicine
-        if (i < medicines.length - 1) {
-          await Future.delayed(Duration(milliseconds: delayBetweenMedicines));
-        }
-      } catch (e, stackTrace) {
-        failureCount++;
-        print('[NotificationService] ✗ Failed to reschedule medicine ${medicine.name} (ID: ${medicine.id}): $e');
-        print('[NotificationService] Stack trace: $stackTrace');
-        // Still add delay even on error to maintain spacing
-        if (i < medicines.length - 1) {
-          await Future.delayed(Duration(milliseconds: delayBetweenMedicines));
+      // Add delay between scheduling each medicine on iOS to avoid hitting system limits
+      final delayBetweenMedicines = Platform.isIOS ? 500 : 100;
+      
+      for (var i = 0; i < medicines.length; i++) {
+        final medicine = medicines[i];
+        try {
+          print('[NotificationService] Rescheduling medicine ${i + 1}/${medicines.length}: ${medicine.name} (ID: ${medicine.id})');
+          await _scheduleForMedicineInternal(medicine, getNextIdInMemory);
+          successCount++;
+          print('[NotificationService] ✓ Successfully rescheduled ${medicine.name}');
+          
+          // Add delay between medicines on iOS to avoid hitting system limits
+          // Skip delay after the last medicine
+          if (i < medicines.length - 1) {
+            await Future.delayed(Duration(milliseconds: delayBetweenMedicines));
+          }
+        } catch (e, stackTrace) {
+          failureCount++;
+          print('[NotificationService] ✗ Failed to reschedule medicine ${medicine.name} (ID: ${medicine.id}): $e');
+          print('[NotificationService] Stack trace: $stackTrace');
+          // Still add delay even on error to maintain spacing
+          if (i < medicines.length - 1) {
+            await Future.delayed(Duration(milliseconds: delayBetweenMedicines));
+          }
         }
       }
+      
+      // Save notification ID counter
+      await storageToUse.setNextNotificationId(currentNotificationId);
+      print('[NotificationService] Saved notification ID counter: $currentNotificationId');
+      
+      print('[NotificationService] Rescheduling complete:');
+      print('[NotificationService]   - Successfully rescheduled: $successCount');
+      print('[NotificationService]   - Failed: $failureCount');
+    } catch (e, stackTrace) {
+      print('[NotificationService] ✗ ERROR rescheduling all notifications: $e');
+      print('[NotificationService] Stack trace: $stackTrace');
+      // Try to save counter even on error
+      try {
+        await storageToUse.setNextNotificationId(currentNotificationId);
+      } catch (_) {}
+      rethrow;
+    } finally {
+      // Unlock
+      _reschedulingInProgress = false;
     }
-    
-    print('[NotificationService] Rescheduling complete:');
-    print('[NotificationService]   - Successfully rescheduled: $successCount');
-    print('[NotificationService]   - Failed: $failureCount');
   }
   
   /// Get all pending notifications from the system (for developer/debugging purposes)
