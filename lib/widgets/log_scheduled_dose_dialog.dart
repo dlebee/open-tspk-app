@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/medicine_dose.dart';
 import '../models/scheduled_dose.dart';
 import '../providers/dose_provider.dart';
+import '../services/notification_service.dart';
 
 class LogScheduledDoseDialog extends ConsumerWidget {
   const LogScheduledDoseDialog({super.key, required this.dose});
@@ -124,6 +125,15 @@ class LogScheduledDoseDialog extends ConsumerWidget {
       scheduledTime: dose.scheduledTime,
       takenAt: takenAt,
     );
+    
+    // Cancel remaining notifications for this schedule
+    await NotificationService.cancelForSchedule(
+      dose.medicineId,
+      dose.scheduledDate,
+      dose.scheduledTime,
+      dose.eye,
+    );
+    
     await ref.read(dosesProvider.notifier).add(newDose);
     if (context.mounted) Navigator.pop(context);
   }

@@ -16,6 +16,7 @@ import '../providers/medicine_provider.dart';
 import '../services/storage_service.dart';
 import '../services/notification_service.dart';
 import '../providers/storage_provider.dart';
+import 'notification_explorer_screen.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -60,6 +61,25 @@ class SettingsScreen extends ConsumerWidget {
                 value: developerMode,
                 onChanged: (v) =>
                     ref.read(developerModeProvider.notifier).setEnabled(v),
+              );
+            },
+          ),
+          Consumer(
+            builder: (context, ref, _) {
+              final developerMode = ref.watch(developerModeProvider);
+              if (!developerMode) return const SizedBox.shrink();
+              return ListTile(
+                leading: const Icon(Icons.notifications_active),
+                title: const Text('Notification Explorer'),
+                subtitle: const Text('View all scheduled notifications'),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const NotificationExplorerScreen(),
+                    ),
+                  );
+                },
               );
             },
           ),
