@@ -6,6 +6,8 @@ import 'dart:io';
 import '../providers/appointment_provider.dart';
 import '../providers/sync_provider.dart';
 import '../providers/theme_provider.dart';
+import '../providers/notification_reminder_provider.dart';
+import '../models/notification_reminder_preference.dart';
 import '../services/cloud_sync/cloud_sync_adapter.dart';
 import '../services/cloud_sync/cloud_sync_service.dart';
 import '../services/cloud_sync_storage_service.dart';
@@ -83,6 +85,18 @@ class SettingsScreen extends ConsumerWidget {
               );
             },
           ),
+          Consumer(
+            builder: (context, ref, _) {
+              final preference = ref.watch(notificationReminderPreferenceProvider);
+              return ListTile(
+                leading: const Icon(Icons.notifications_active),
+                title: const Text('Configure notifications'),
+                subtitle: Text(_getNotificationSummary(preference)),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => _showNotificationConfigurationBottomSheet(context, ref),
+              );
+            },
+          ),
           ListTile(
             leading: const Icon(Icons.upload_file),
             title: const Text('Export data'),
@@ -110,6 +124,26 @@ class SettingsScreen extends ConsumerWidget {
           ),
         ],
       ),
+    );
+  }
+
+  String _getNotificationSummary(NotificationReminderPreference preference) {
+    final parts = <String>[];
+    if (preference.isEnabled(0)) parts.add('At scheduled time');
+    if (preference.isEnabled(15)) parts.add('15 min before');
+    if (preference.isEnabled(10)) parts.add('10 min before');
+    if (preference.isEnabled(5)) parts.add('5 min before');
+    
+    if (parts.isEmpty) return 'No notifications';
+    if (parts.length == 4) return 'All notifications enabled';
+    return parts.join(', ');
+  }
+
+  Future<void> _showNotificationConfigurationBottomSheet(BuildContext context, WidgetRef ref) async {
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => const _NotificationConfigurationSheet(),
     );
   }
 
@@ -159,6 +193,7 @@ class SettingsScreen extends ConsumerWidget {
       ref.invalidate(flareUpsProvider);
       ref.invalidate(appointmentsProvider);
       ref.invalidate(developerModeProvider);
+      ref.invalidate(notificationReminderPreferenceProvider);
 
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -501,6 +536,156 @@ class _CloudSyncSectionState extends ConsumerState<_CloudSyncSection> {
       }
     } finally {
       setState(() => _isInitializing = false);
+    }
+  }
+}
+
+class _NotificationConfigurationSheet extends ConsumerStatefulWidget {
+  const _NotificationConfigurationSheet();
+
+  @override
+  ConsumerState<_NotificationConfigurationSheet> createState() => _NotificationConfigurationSheetState();
+}
+
+class _NotificationConfigurationSheetState extends ConsumerState<_NotificationConfigurationSheet> {
+  bool _isSaving = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final preference = ref.watch(notificationReminderPreferenceProvider);
+
+    return DraggableScrollableSheet(
+      initialChildSize: 0.6,
+      minChildSize: 0.5,
+      maxChildSize: 0.9,
+      expand: false,
+      builder: (context, scrollController) {
+        return Container(
+          decoration: BoxDecoration(
+            color: Theme.of(context).scaffoldBackgroundColor,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          child: Column(
+            children: [
+              Container(
+                margin: const EdgeInsets.only(top: 12),
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey[300],
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  children: [
+                    const Icon(Icons.notifications_active),
+                    const SizedBox(width: 8),
+                    const Text(
+                      'Notification Configuration',
+                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                    ),
+                    const Spacer(),
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: ListView(
+                  controller: scrollController,
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  children: [
+                    SwitchListTile(
+                      secondary: const Icon(Icons.access_time),
+                      title: const Text('At scheduled time'),
+                      subtitle: const Text('Notify when it\'s time to take your medicine'),
+                      value: preference.isEnabled(0),
+                      onChanged: _isSaving ? null : (enabled) => _toggleReminder(0),
+                    ),
+                    SwitchListTile(
+                      secondary: const Icon(Icons.timer),
+                      title: const Text('15 minutes before'),
+                      subtitle: const Text('Remind 15 minutes before scheduled time'),
+                      value: preference.isEnabled(15),
+                      onChanged: _isSaving ? null : (enabled) => _toggleReminder(15),
+                    ),
+                    SwitchListTile(
+                      secondary: const Icon(Icons.timer),
+                      title: const Text('10 minutes before'),
+                      subtitle: const Text('Remind 10 minutes before scheduled time'),
+                      value: preference.isEnabled(10),
+                      onChanged: _isSaving ? null : (enabled) => _toggleReminder(10),
+                    ),
+                    SwitchListTile(
+                      secondary: const Icon(Icons.timer),
+                      title: const Text('5 minutes before'),
+                      subtitle: const Text('Remind 5 minutes before scheduled time'),
+                      value: preference.isEnabled(5),
+                      onChanged: _isSaving ? null : (enabled) => _toggleReminder(5),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                ),
+              ),
+              SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: FilledButton(
+                    onPressed: _isSaving ? null : () => Navigator.pop(context),
+                    style: FilledButton.styleFrom(
+                      minimumSize: const Size(double.infinity, 48),
+                    ),
+                    child: _isSaving
+                        ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text('Done'),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _toggleReminder(int minutes) async {
+    setState(() => _isSaving = true);
+    try {
+      await ref.read(notificationReminderPreferenceProvider.notifier).toggleReminder(minutes);
+      // Small delay to ensure storage is written
+      await Future.delayed(const Duration(milliseconds: 100));
+      // Use current storage from provider to ensure we have the latest medicines
+      final storage = ref.read(storageServiceProvider);
+      await NotificationService.rescheduleAllNotifications(storage: storage);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Notifications updated'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to update notifications: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSaving = false);
+      }
     }
   }
 }

@@ -8,6 +8,7 @@ import 'package:timezone/timezone.dart' as tz;
 
 import '../models/medicine.dart';
 import '../models/medicine_dose.dart';
+import '../models/notification_reminder_preference.dart';
 import 'storage_service.dart';
 
 class NotificationService {
@@ -452,8 +453,11 @@ class NotificationService {
       await cancelForMedicine(medicine.id, medicine: medicine);
       print('[NotificationService] Cancelled existing notifications for medicine ${medicine.id}');
       
-      // Small delay to ensure cancellation completes before scheduling
-      await Future.delayed(const Duration(milliseconds: 50));
+      // Delay to ensure cancellation completes before scheduling
+      // Use longer delay on iOS to avoid hitting system limits
+      final delayMs = Platform.isIOS ? 750 : 100;
+      await Future.delayed(Duration(milliseconds: delayMs));
+      print('[NotificationService] Waited ${delayMs}ms after cancellation before rescheduling (iOS: ${Platform.isIOS})');
       
       final medicinePart = _medicinePart(medicine.id);
       print('[NotificationService] Medicine part (for ID calculation): $medicinePart');
@@ -569,14 +573,53 @@ class NotificationService {
               print('[NotificationService] Payload: $payload');
               print('[NotificationService] Scheduled date in payload: $scheduledDateStr (from local time: $scheduledLocal)');
               
-              // Schedule 4 notifications: 15 min before, 10 min before, 5 min before, and at scheduled time
+              // Get user's notification reminder preference
+              final reminderPreference = _storage?.getNotificationReminderPreference() ?? const NotificationReminderPreference.defaultValue();
+              final selectedReminderMinutes = reminderPreference.enabledReminders;
+              
+              print('[NotificationService] Reading reminder preference for medicine ${medicine.name}:');
+              print('[NotificationService]   - Storage available: ${_storage != null}');
+              print('[NotificationService]   - Preference display: ${reminderPreference.displayName}');
+              print('[NotificationService]   - Enabled reminders: $selectedReminderMinutes');
+              
+              // Schedule notifications based on user preference
               // All notifications repeat weekly on the same day of week
-              final notificationTimes = [
+              final allNotificationTimes = [
                 {'offset': 3, 'minutes': 15, 'message': 'Reminder to take ${medicine.name} in 15 minutes'},
                 {'offset': 2, 'minutes': 10, 'message': 'Reminder to take ${medicine.name} in 10 minutes'},
                 {'offset': 1, 'minutes': 5, 'message': 'Reminder to take ${medicine.name} in 5 minutes'},
                 {'offset': 0, 'minutes': 0, 'message': 'Time to take ${medicine.name} - ${schedule.eye.name}'},
               ];
+              
+              // Filter to only include selected reminders
+              var notificationTimes = allNotificationTimes.where((notif) {
+                final minutes = notif['minutes'] as int;
+                final offset = notif['offset'] as int;
+                // Include reminder if it's in the user's selected preferences
+                final shouldInclude = selectedReminderMinutes.contains(minutes);
+                if (shouldInclude) {
+                  if (offset == 0) {
+                    print('[NotificationService]   - Including "at scheduled time" notification (enabled)');
+                  } else {
+                    print('[NotificationService]   - Including ${minutes} min reminder (enabled)');
+                  }
+                } else {
+                  if (offset == 0) {
+                    print('[NotificationService]   - Filtering out "at scheduled time" notification (not enabled)');
+                  } else {
+                    print('[NotificationService]   - Filtering out ${minutes} min reminder (not enabled)');
+                  }
+                }
+                return shouldInclude;
+              }).toList();
+              
+              // Safety check: ensure at least one notification is included
+              if (notificationTimes.isEmpty) {
+                print('[NotificationService] ⚠️ WARNING: No notifications enabled! Adding "at scheduled time" notification as fallback.');
+                notificationTimes = [allNotificationTimes.firstWhere((n) => n['offset'] == 0)];
+              }
+              
+              print('[NotificationService] Scheduling ${notificationTimes.length} notification(s): ${notificationTimes.map((n) => n['minutes'] == 0 ? 'at scheduled time' : '${n['minutes']} min before').join(', ')}');
               
               for (final notifTime in notificationTimes) {
                 final offset = notifTime['offset'] as int;
@@ -888,30 +931,63 @@ class NotificationService {
   }
   
   /// Reschedule notifications for all medicines (useful after app restart or to fix scheduling issues)
-  static Future<void> rescheduleAllNotifications() async {
+  /// [storage] - Optional storage service to use. If not provided, uses the static storage.
+  static Future<void> rescheduleAllNotifications({IStorageService? storage}) async {
     print('[NotificationService] Rescheduling all notifications...');
-    final storage = _storage;
-    if (storage == null) {
+    final storageToUse = storage ?? _storage;
+    if (storageToUse == null) {
       print('[NotificationService] ✗ ERROR: Storage service not set, cannot reschedule');
       return;
     }
     
-    final medicines = storage.getMedicines();
+    print('[NotificationService] Using storage: ${storageToUse.runtimeType}');
+    
+    // Update static storage so scheduleForMedicine can read the latest preferences
+    // This ensures notification preferences are read from the correct storage instance
+    if (storage != null) {
+      _storage = storageToUse;
+      print('[NotificationService] Updated static storage to use provided storage instance');
+    }
+    
+    // Don't cancel all at once - let each scheduleForMedicine handle its own cancellation
+    // This avoids potential iOS issues with cancelAll() and provides better control
+    final medicines = storageToUse.getMedicines();
     print('[NotificationService] Found ${medicines.length} medicine(s) to reschedule');
+    
+    if (medicines.isEmpty) {
+      print('[NotificationService] ⚠️ WARNING: No medicines found in storage. Cannot reschedule notifications.');
+      return;
+    }
     
     int successCount = 0;
     int failureCount = 0;
     
-    for (final medicine in medicines) {
+    // Add delay between scheduling each medicine on iOS to avoid hitting system limits
+    final delayBetweenMedicines = Platform.isIOS ? 500 : 100;
+    
+    for (var i = 0; i < medicines.length; i++) {
+      final medicine = medicines[i];
       try {
-        print('[NotificationService] Rescheduling medicine: ${medicine.name} (ID: ${medicine.id})');
+        print('[NotificationService] Rescheduling medicine ${i + 1}/${medicines.length}: ${medicine.name} (ID: ${medicine.id})');
+        // scheduleForMedicine will cancel existing notifications for this medicine and reschedule
+        // It will use the updated _storage to read notification preferences
         await scheduleForMedicine(medicine);
         successCount++;
         print('[NotificationService] ✓ Successfully rescheduled ${medicine.name}');
+        
+        // Add delay between medicines on iOS to avoid hitting system limits
+        // Skip delay after the last medicine
+        if (i < medicines.length - 1) {
+          await Future.delayed(Duration(milliseconds: delayBetweenMedicines));
+        }
       } catch (e, stackTrace) {
         failureCount++;
         print('[NotificationService] ✗ Failed to reschedule medicine ${medicine.name} (ID: ${medicine.id}): $e');
         print('[NotificationService] Stack trace: $stackTrace');
+        // Still add delay even on error to maintain spacing
+        if (i < medicines.length - 1) {
+          await Future.delayed(Duration(milliseconds: delayBetweenMedicines));
+        }
       }
     }
     

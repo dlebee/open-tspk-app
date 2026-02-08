@@ -2,6 +2,7 @@ import '../models/appointment_note.dart';
 import '../models/flare_up.dart';
 import '../models/medicine.dart';
 import '../models/medicine_dose.dart';
+import '../models/notification_reminder_preference.dart';
 import 'cloud_sync/cloud_sync_adapter.dart';
 import 'cloud_sync/conflict_resolver.dart';
 import 'storage_service.dart';
@@ -167,6 +168,16 @@ class CloudSyncStorageService implements IStorageService {
   @override
   Future<void> setCloudSyncEnabled(bool enabled) async {
     await _localStorage.setCloudSyncEnabled(enabled);
+  }
+
+  @override
+  NotificationReminderPreference getNotificationReminderPreference() {
+    return _localStorage.getNotificationReminderPreference();
+  }
+
+  @override
+  Future<void> setNotificationReminderPreference(NotificationReminderPreference preference) async {
+    await _localStorage.setNotificationReminderPreference(preference);
   }
 
   @override

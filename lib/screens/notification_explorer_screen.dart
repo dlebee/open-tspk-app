@@ -2,18 +2,20 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../providers/storage_provider.dart';
 import '../services/notification_service.dart';
 
-class NotificationExplorerScreen extends StatefulWidget {
+class NotificationExplorerScreen extends ConsumerStatefulWidget {
   const NotificationExplorerScreen({super.key});
 
   @override
-  State<NotificationExplorerScreen> createState() => _NotificationExplorerScreenState();
+  ConsumerState<NotificationExplorerScreen> createState() => _NotificationExplorerScreenState();
 }
 
-class _NotificationExplorerScreenState extends State<NotificationExplorerScreen> {
+class _NotificationExplorerScreenState extends ConsumerState<NotificationExplorerScreen> {
   List<PendingNotificationRequest> _notifications = [];
   bool _isLoading = true;
   DateTime? _lastRefresh;
@@ -121,7 +123,9 @@ class _NotificationExplorerScreenState extends State<NotificationExplorerScreen>
     );
     
     try {
-      await NotificationService.rescheduleAllNotifications();
+      // Use current storage from provider to ensure we have the latest medicines
+      final storage = ref.read(storageServiceProvider);
+      await NotificationService.rescheduleAllNotifications(storage: storage);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(

@@ -7,6 +7,7 @@ import '../models/appointment_note.dart';
 import '../models/flare_up.dart';
 import '../models/medicine.dart';
 import '../models/medicine_dose.dart';
+import '../models/notification_reminder_preference.dart';
 
 /// Abstract interface for storage operations
 abstract class IStorageService {
@@ -23,6 +24,8 @@ abstract class IStorageService {
   Future<void> setDeveloperMode(bool enabled);
   bool getCloudSyncEnabled();
   Future<void> setCloudSyncEnabled(bool enabled);
+  NotificationReminderPreference getNotificationReminderPreference();
+  Future<void> setNotificationReminderPreference(NotificationReminderPreference preference);
   Future<void> wipeAllData();
 }
 
@@ -148,8 +151,32 @@ class LocalStorageService implements IStorageService {
     await _preferences?.put('cloudSyncEnabled', enabled ? 'true' : 'false');
   }
 
+  @override
+  NotificationReminderPreference getNotificationReminderPreference() {
+    final raw = _preferences?.get('notificationReminderPreference');
+    print('[StorageService] Reading notification reminder preference. Raw value: $raw');
+    if (raw == null) {
+      print('[StorageService] No preference found, returning default');
+      return const NotificationReminderPreference.defaultValue();
+    }
+    final pref = NotificationReminderPreference.fromJson(raw);
+    print('[StorageService] Parsed preference: ${pref.enabledReminders}');
+    return pref;
+  }
+
+  @override
+  Future<void> setNotificationReminderPreference(NotificationReminderPreference preference) async {
+    final json = preference.toJson();
+    print('[StorageService] Saving notification reminder preference: $json (enabled: ${preference.enabledReminders})');
+    await _preferences?.put('notificationReminderPreference', json);
+    // Verify it was saved
+    final savedRaw = _preferences?.get('notificationReminderPreference');
+    print('[StorageService] Verification - saved value: $savedRaw');
+  }
+
   /// Wipes all data from all boxes. This is irreversible.
   /// Preserves developer mode setting.
+  /// Resets notification reminder preference to default.
   @override
   Future<void> wipeAllData() async {
     // Preserve developer mode setting before clearing preferences
@@ -165,5 +192,8 @@ class LocalStorageService implements IStorageService {
     if (developerModeEnabled) {
       await setDeveloperMode(true);
     }
+    
+    // Reset notification reminder preference to default
+    await setNotificationReminderPreference(const NotificationReminderPreference.defaultValue());
   }
 }
