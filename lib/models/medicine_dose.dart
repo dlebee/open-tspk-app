@@ -69,14 +69,8 @@ class MedicineDose {
         id: json['id'] as String? ?? _uuid.v4(),
         medicineId: json['medicineId'] as String,
         medicineName: json['medicineName'] as String?,
-        eye: Eye.values.firstWhere(
-          (e) => e.name == json['eye'],
-          orElse: () => Eye.both,
-        ),
-        status: DoseStatus.values.firstWhere(
-          (e) => e.name == json['status'],
-          orElse: () => DoseStatus.taken,
-        ),
+        eye: Eye.values.firstWhere((e) => e.name == json['eye'] as String),
+        status: DoseStatus.values.firstWhere((e) => e.name == json['status'] as String),
         recordedAt: DateTime.parse(json['recordedAt'] as String),
         scheduledDate: json['scheduledDate'] != null
             ? DateTime.parse(json['scheduledDate'] as String)

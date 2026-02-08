@@ -71,8 +71,8 @@ class FlareUp {
         'date': date.toIso8601String(),
         'leftEye': leftEye,
         'rightEye': rightEye,
-        'leftPainLevel': leftPainLevel?.name,
-        'rightPainLevel': rightPainLevel?.name,
+        if (leftPainLevel != null) 'leftPainLevel': leftPainLevel!.name,
+        if (rightPainLevel != null) 'rightPainLevel': rightPainLevel!.name,
         'reason': reason,
         'comment': comment,
       };
@@ -83,16 +83,10 @@ class FlareUp {
         leftEye: json['leftEye'] as bool,
         rightEye: json['rightEye'] as bool,
         leftPainLevel: json['leftPainLevel'] != null
-            ? PainLevel.values.firstWhere(
-                (e) => e.name == json['leftPainLevel'],
-                orElse: () => PainLevel.medium,
-              )
+            ? PainLevel.values.firstWhere((e) => e.name == json['leftPainLevel'] as String)
             : null,
         rightPainLevel: json['rightPainLevel'] != null
-            ? PainLevel.values.firstWhere(
-                (e) => e.name == json['rightPainLevel'],
-                orElse: () => PainLevel.medium,
-              )
+            ? PainLevel.values.firstWhere((e) => e.name == json['rightPainLevel'] as String)
             : null,
         reason: json['reason'] as String?,
         comment: json['comment'] as String?,

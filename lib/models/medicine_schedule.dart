@@ -41,10 +41,7 @@ class MedicineSchedule {
   factory MedicineSchedule.fromJson(Map<String, dynamic> json) =>
       MedicineSchedule(
         id: json['id'] as String? ?? _uuid.v4(),
-        eye: Eye.values.firstWhere(
-          (e) => e.name == json['eye'],
-          orElse: () => Eye.both,
-        ),
+        eye: Eye.values.firstWhere((e) => e.name == json['eye'] as String),
         daysOfWeek: List<int>.from(json['daysOfWeek'] as List),
         times: List<String>.from(json['times'] as List),
       );
