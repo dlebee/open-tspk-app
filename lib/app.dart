@@ -297,9 +297,22 @@ class _MainNavigatorState extends State<MainNavigator> {
               decoration: BoxDecoration(
                 color: Theme.of(context).colorScheme.primaryContainer,
               ),
-              child: Text(
-                'Thygeson',
-                style: Theme.of(context).textTheme.headlineSmall,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Image.asset(
+                    'assets/icons/thygeson_logo.png',
+                    width: 80,
+                    height: 80,
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Thygeson',
+                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
               ),
             ),
             ...List.generate(_items.length, (i) {

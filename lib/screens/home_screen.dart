@@ -50,7 +50,20 @@ class HomeScreen extends ConsumerWidget {
           onPressed: () => Scaffold.of(context).openDrawer(),
           tooltip: 'Open menu',
         ),
-        title: const Text('Thygeson'),
+        centerTitle: true,
+        title: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Image.asset(
+              'assets/icons/thygeson_logo.png',
+              width: 32,
+              height: 32,
+            ),
+            const SizedBox(width: 8),
+            const Text('Thygeson'),
+          ],
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.add_circle_outline),
