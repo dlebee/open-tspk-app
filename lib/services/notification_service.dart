@@ -588,7 +588,7 @@ class NotificationService {
                 {'offset': 3, 'minutes': 15, 'message': 'Reminder to take ${medicine.name} in 15 minutes'},
                 {'offset': 2, 'minutes': 10, 'message': 'Reminder to take ${medicine.name} in 10 minutes'},
                 {'offset': 1, 'minutes': 5, 'message': 'Reminder to take ${medicine.name} in 5 minutes'},
-                {'offset': 0, 'minutes': 0, 'message': 'Time to take ${medicine.name} - ${schedule.eye.name}'},
+                {'offset': 0, 'minutes': 0, 'message': 'Time to take ${medicine.name}'},
               ];
               
               // Filter to only include selected reminders
@@ -1151,7 +1151,7 @@ class NotificationService {
               {'offset': 3, 'minutes': 15, 'message': 'Reminder to take ${medicine.name} in 15 minutes'},
               {'offset': 2, 'minutes': 10, 'message': 'Reminder to take ${medicine.name} in 10 minutes'},
               {'offset': 1, 'minutes': 5, 'message': 'Reminder to take ${medicine.name} in 5 minutes'},
-              {'offset': 0, 'minutes': 0, 'message': 'Time to take ${medicine.name} - ${schedule.eye.name}'},
+              {'offset': 0, 'minutes': 0, 'message': 'Time to take ${medicine.name}'},
             ];
             
             for (final notifTime in notificationTimes) {
