@@ -181,6 +181,16 @@ class CloudSyncStorageService implements IStorageService {
   }
 
   @override
+  int getNextNotificationId() {
+    return _localStorage.getNextNotificationId();
+  }
+
+  @override
+  Future<void> setNextNotificationId(int id) async {
+    await _localStorage.setNextNotificationId(id);
+  }
+
+  @override
   Future<void> wipeAllData() async {
     await _localStorage.wipeAllData();
     // Optionally wipe cloud data too

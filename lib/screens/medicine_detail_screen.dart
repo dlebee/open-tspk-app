@@ -132,7 +132,6 @@ class _MedicineDetailScreenState extends ConsumerState<MedicineDetailScreen> {
     try {
       if (_isNew) {
         final medicine = Medicine(
-          id: DateTime.now().millisecondsSinceEpoch.toString(),
           name: name,
           schedules: _schedules,
           createdAt: _startDate,

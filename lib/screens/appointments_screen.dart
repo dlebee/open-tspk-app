@@ -148,8 +148,7 @@ class _AppointmentFormState extends State<AppointmentForm> {
                       final office = _officeController.text.trim();
                       if (office.isEmpty) return;
                       widget.onSave(AppointmentNote(
-                        id: widget.existing?.id ??
-                            DateTime.now().millisecondsSinceEpoch.toString(),
+                        id: widget.existing?.id,
                         date: _dateTime,
                         doctorOffice: office,
                         notes: _notesController.text.trim(),

@@ -26,6 +26,8 @@ abstract class IStorageService {
   Future<void> setCloudSyncEnabled(bool enabled);
   NotificationReminderPreference getNotificationReminderPreference();
   Future<void> setNotificationReminderPreference(NotificationReminderPreference preference);
+  int getNextNotificationId();
+  Future<void> setNextNotificationId(int id);
   Future<void> wipeAllData();
 }
 
@@ -172,6 +174,18 @@ class LocalStorageService implements IStorageService {
     // Verify it was saved
     final savedRaw = _preferences?.get('notificationReminderPreference');
     print('[StorageService] Verification - saved value: $savedRaw');
+  }
+
+  @override
+  int getNextNotificationId() {
+    final raw = _preferences?.get('nextNotificationId');
+    if (raw == null) return 1; // Start at 1
+    return int.tryParse(raw) ?? 1;
+  }
+
+  @override
+  Future<void> setNextNotificationId(int id) async {
+    await _preferences?.put('nextNotificationId', id.toString());
   }
 
   /// Wipes all data from all boxes. This is irreversible.

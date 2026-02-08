@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:uuid/uuid.dart';
+
+const _uuid = Uuid();
 
 enum PainLevel { terrible, bad, medium, low }
 
@@ -31,7 +34,7 @@ class FlareUp {
   final String? comment;
 
   FlareUp({
-    required this.id,
+    String? id,
     required this.date,
     required this.leftEye,
     required this.rightEye,
@@ -39,7 +42,7 @@ class FlareUp {
     this.rightPainLevel,
     this.reason,
     this.comment,
-  });
+  }) : id = id ?? _uuid.v4();
 
   FlareUp copyWith({
     String? id,
@@ -75,7 +78,7 @@ class FlareUp {
       };
 
   factory FlareUp.fromJson(Map<String, dynamic> json) => FlareUp(
-        id: json['id'] as String,
+        id: json['id'] as String? ?? _uuid.v4(),
         date: DateTime.parse(json['date'] as String),
         leftEye: json['leftEye'] as bool,
         rightEye: json['rightEye'] as bool,

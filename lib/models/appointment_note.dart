@@ -1,3 +1,7 @@
+import 'package:uuid/uuid.dart';
+
+const _uuid = Uuid();
+
 class AppointmentNote {
   final String id;
   final DateTime date;
@@ -6,12 +10,12 @@ class AppointmentNote {
   final String? calendarEventId;
 
   AppointmentNote({
-    required this.id,
+    String? id,
     required this.date,
     required this.doctorOffice,
     required this.notes,
     this.calendarEventId,
-  });
+  }) : id = id ?? _uuid.v4();
 
   AppointmentNote copyWith({
     String? id,
@@ -37,29 +41,11 @@ class AppointmentNote {
         if (calendarEventId != null) 'calendarEventId': calendarEventId,
       };
 
-  factory AppointmentNote.fromJson(Map<String, dynamic> json) {
-    // Safely parse calendarEventId (backward compatibility with addedToCalendar)
-    String? calendarEventId;
-    if (json.containsKey('calendarEventId')) {
-      final value = json['calendarEventId'];
-      if (value is String && value.isNotEmpty) {
-        calendarEventId = value;
-      }
-    } else if (json.containsKey('addedToCalendar')) {
-      // Backward compatibility: if old data has addedToCalendar=true, generate event ID
-      final added = json['addedToCalendar'];
-      if (added is bool && added == true) {
-        // Generate event ID from appointment ID for backward compatibility
-        calendarEventId = 'thygeson_appt_${json['id']}';
-      }
-    }
-    
-    return AppointmentNote(
-      id: json['id'] as String,
-      date: DateTime.parse(json['date'] as String),
-      doctorOffice: json['doctorOffice'] as String,
-      notes: json['notes'] as String,
-      calendarEventId: calendarEventId,
-    );
-  }
+  factory AppointmentNote.fromJson(Map<String, dynamic> json) => AppointmentNote(
+        id: json['id'] as String? ?? _uuid.v4(),
+        date: DateTime.parse(json['date'] as String),
+        doctorOffice: json['doctorOffice'] as String,
+        notes: json['notes'] as String,
+        calendarEventId: json['calendarEventId'] as String?,
+      );
 }

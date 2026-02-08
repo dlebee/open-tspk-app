@@ -33,6 +33,14 @@ class NotificationService {
   static IStorageService? _storage;
   static void Function(String medicineId, String eye, String scheduledDate, String scheduledTime)? _onOverrideTimeRequested;
   static void Function()? _onDoseAdded;
+  static void Function(String medicineId, String scheduleId, String eye, String scheduledDate, String scheduledTime)? _onNotificationTapped;
+  
+  // Track notification ID assignments for cancellation
+  // Key: 'medicineId|scheduleId|dayOfWeek|timeIndex|offset'
+  static final Map<String, int> _notificationIdMap = {};
+  
+  // Lock for atomic notification ID generation
+  static bool _idGenerationInProgress = false;
 
   static void setStorage(IStorageService storage) {
     _storage = storage;
@@ -44,6 +52,10 @@ class NotificationService {
 
   static void setOnDoseAdded(void Function() fn) {
     _onDoseAdded = fn;
+  }
+
+  static void setOnNotificationTapped(void Function(String medicineId, String scheduleId, String eye, String scheduledDate, String scheduledTime) fn) {
+    _onNotificationTapped = fn;
   }
 
   static Future<void> init() async {
@@ -200,13 +212,20 @@ class NotificationService {
     try {
       final map = jsonDecode(payload) as Map<String, dynamic>;
       final medicineId = map['medicineId'] as String?;
+      final scheduleId = map['scheduleId'] as String?;
       final eyeStr = map['eye'] as String?;
       final scheduledDate = map['scheduledDate'] as String?;
       final scheduledTime = map['scheduledTime'] as String?;
-      if (medicineId == null || eyeStr == null || scheduledDate == null || scheduledTime == null) return;
+      if (medicineId == null || scheduleId == null || eyeStr == null || scheduledDate == null || scheduledTime == null) return;
 
       final eye = Eye.values.firstWhere((e) => e.name == eyeStr, orElse: () => Eye.both);
       final scheduledDt = DateTime.parse(scheduledDate);
+
+      // Handle notification tap (no action button pressed)
+      if (response.actionId == null || response.actionId == '') {
+        _onNotificationTapped?.call(medicineId, scheduleId, eyeStr, scheduledDate, scheduledTime);
+        return;
+      }
 
       switch (response.actionId) {
         case 'skip':
@@ -233,7 +252,7 @@ class NotificationService {
     final doses = storage.getDoses();
     // Look up medicine name for denormalization
     final medicines = storage.getMedicines();
-    final medicine = medicines.firstWhere((m) => m.id == medicineId, orElse: () => Medicine(id: '', name: 'Unknown', schedules: [], createdAt: DateTime.now()));
+    final medicine = medicines.firstWhere((m) => m.id == medicineId, orElse: () => Medicine(name: 'Unknown', schedules: [], createdAt: DateTime.now()));
     
     // Cancel remaining notifications for this schedule
     await _cancelForSchedule(medicineId, scheduledDate, scheduledTime, eye);
@@ -255,7 +274,6 @@ class NotificationService {
     }
     
     final dose = MedicineDose(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
       medicineId: medicineId,
       medicineName: medicine.name,
       eye: eye,
@@ -280,12 +298,12 @@ class NotificationService {
     }
     
     final medicines = storage.getMedicines();
-    final medicine = medicines.firstWhere((m) => m.id == medicineId, orElse: () => Medicine(id: '', name: '', schedules: [], createdAt: DateTime.now()));
-    
-    if (medicine.id.isEmpty) {
+    final medicineIndex = medicines.indexWhere((m) => m.id == medicineId);
+    if (medicineIndex == -1) {
       print('[NotificationService] ✗ Medicine not found for ID: $medicineId');
       return;
     }
+    final medicine = medicines[medicineIndex];
     
     final parts = scheduledTime.split(':');
     final hour = int.parse(parts[0]);
@@ -297,9 +315,8 @@ class NotificationService {
     
     // Find the matching schedule
     bool found = false;
-    for (var si = 0; si < medicine.schedules.length; si++) {
-      final schedule = medicine.schedules[si];
-      print('[NotificationService] Checking schedule $si: eye=${schedule.eye.name}, days=${schedule.daysOfWeek}, times=${schedule.times}');
+    for (final schedule in medicine.schedules) {
+      print('[NotificationService] Checking schedule ${schedule.id}: eye=${schedule.eye.name}, days=${schedule.daysOfWeek}, times=${schedule.times}');
       
       if (schedule.eye != eye) {
         print('[NotificationService] Eye mismatch (expected $eye, got ${schedule.eye.name}), skipping');
@@ -309,28 +326,34 @@ class NotificationService {
       // Check if this schedule has the matching time and day
       if (schedule.daysOfWeek.contains(scheduledWeekday) && schedule.times.contains(scheduledTime)) {
         final timeIndex = schedule.times.indexOf(scheduledTime);
-        final medicinePart = _medicinePart(medicineId);
         
-        print('[NotificationService] Found matching schedule at index $si, time index $timeIndex');
+        print('[NotificationService] Found matching schedule ${schedule.id}, time index $timeIndex');
         print('[NotificationService] Cancelling 4 notifications (15min before, 10min before, 5min before, at time)');
         
         // Cancel all 4 notifications (0=at time, 1=5min before, 2=10min before, 3=15min before)
         int cancelledCount = 0;
         for (var offset = 0; offset < 4; offset++) {
-          final id = _id(medicinePart, si, scheduledWeekday, timeIndex, offset);
-          try {
-            await _plugin.cancel(id);
-            print('[NotificationService] ✓ Cancelled notification ID $id (offset=$offset)');
-            cancelledCount++;
-          } catch (e) {
-            print('[NotificationService] Could not cancel notification ID $id: $e (may not exist)');
+          final key = '$medicineId|${schedule.id}|$scheduledWeekday|$timeIndex|$offset';
+          final id = _notificationIdMap[key];
+          if (id != null) {
+            try {
+              await _plugin.cancel(id);
+              print('[NotificationService] ✓ Cancelled notification ID $id (offset=$offset)');
+              cancelledCount++;
+              // Remove from map after successful cancellation
+              _notificationIdMap.remove(key);
+            } catch (e) {
+              print('[NotificationService] Could not cancel notification ID $id: $e (may not exist)');
+            }
+          } else {
+            print('[NotificationService] No stored ID found for key: $key (may have been cancelled already)');
           }
         }
         print('[NotificationService] Cancelled $cancelledCount notification(s) for this schedule');
         found = true;
         break;
       } else {
-        print('[NotificationService] Schedule $si does not match (days match: ${schedule.daysOfWeek.contains(scheduledWeekday)}, times match: ${schedule.times.contains(scheduledTime)})');
+        print('[NotificationService] Schedule ${schedule.id} does not match (days match: ${schedule.daysOfWeek.contains(scheduledWeekday)}, times match: ${schedule.times.contains(scheduledTime)})');
       }
     }
     
@@ -340,36 +363,58 @@ class NotificationService {
   }
 
   /// Notification IDs must fit in 32-bit int (max: 2,147,483,647).
-  /// Use bit-shifting to pack components efficiently.
-  /// notificationOffset: 0 = at scheduled time, 1 = 5 min before, 2 = 10 min before, 3 = 15 min before
-  /// 
-  /// Bit allocation:
-  /// - medicinePart (0-999): bits 0-9 (10 bits, max 1023)
-  /// - scheduleIndex (0-99): bits 10-16 (7 bits, max 127)
-  /// - dayOfWeek (1-7): bits 17-19 (3 bits, max 7)
-  /// - timeIndex (0-99): bits 20-26 (7 bits, max 127)
-  /// - notificationOffset (0-3): bits 27-28 (2 bits, max 3)
-  /// Total: 29 bits, well within 32-bit limit
-  static int _id(int medicinePart, int scheduleIndex, int dayOfWeek, int timeIndex, int notificationOffset) {
-    // Ensure values are within expected ranges
-    final mp = (medicinePart % 1000).abs();
-    final si = (scheduleIndex % 100).abs();
-    final dow = ((dayOfWeek - 1) % 7).abs(); // Convert 1-7 to 0-6
-    final ti = (timeIndex % 100).abs();
-    final offset = (notificationOffset % 4).abs(); // Now supports 0-3 (4 offsets)
+  /// Uses a simple incrementing counter that wraps back to 1 when it reaches the maximum.
+  /// Each device maintains its own local counter (not synced across devices).
+  /// This method is atomic to prevent duplicate IDs from concurrent calls.
+  static Future<int> _getNextNotificationId() async {
+    // Wait if another ID generation is in progress to prevent race conditions
+    while (_idGenerationInProgress) {
+      await Future.delayed(const Duration(milliseconds: 10));
+    }
     
-    // Pack using bit shifting: each component gets its allocated bits
-    // Max value: 1023 * 1 + 127 * 1024 + 7 * 131072 + 127 * 134217728 + 3 * 268435456
-    // = 1023 + 130048 + 917504 + 17044992 + 805306368 = 822,444,447 (well within 32-bit limit)
-    return mp | 
-           (si << 10) | 
-           (dow << 17) | 
-           (ti << 20) | 
-           (offset << 27);
+    _idGenerationInProgress = true;
+    try {
+      final storage = _storage;
+      if (storage == null) {
+        print('[NotificationService] WARNING: Storage not available, using default ID 1');
+        return 1;
+      }
+      
+      const maxId = 2147483647; // Maximum 32-bit signed integer
+      int currentId = storage.getNextNotificationId();
+      
+      // Increment and wrap if needed
+      int nextId = currentId + 1;
+      if (nextId > maxId) {
+        nextId = 1; // Wrap back to 1
+        print('[NotificationService] Notification ID counter wrapped from $maxId back to 1');
+      }
+      
+      // Save the next ID for future use
+      await storage.setNextNotificationId(nextId);
+      
+      return currentId; // Return the ID we're using now (before increment)
+    } finally {
+      _idGenerationInProgress = false;
+    }
   }
-
-  static int _medicinePart(String medicineId) {
-    return (medicineId.hashCode % 1000).abs();
+  
+  /// Get or assign a notification ID for a specific notification.
+  /// Uses incrementing counter and tracks assignments for cancellation.
+  /// Always generates a new ID - the map is used for tracking, not for reusing IDs.
+  static Future<int> _getId(String medicineId, String scheduleId, int dayOfWeek, int timeIndex, int notificationOffset) async {
+    final key = '$medicineId|$scheduleId|$dayOfWeek|$timeIndex|$notificationOffset';
+    
+    // Always generate a new ID to ensure uniqueness
+    // The map is used for tracking which ID is assigned to which notification for cancellation
+    final id = await _getNextNotificationId();
+    _notificationIdMap[key] = id;
+    return id;
+  }
+  
+  /// Clear notification ID mappings (useful when cancelling all or rescheduling)
+  static void _clearNotificationIdMappings() {
+    _notificationIdMap.clear();
   }
 
   /// Converts a local DateTime to TZDateTime for scheduling.
@@ -453,22 +498,21 @@ class NotificationService {
       await cancelForMedicine(medicine.id, medicine: medicine);
       print('[NotificationService] Cancelled existing notifications for medicine ${medicine.id}');
       
+      // Clear notification ID mappings for this medicine to ensure fresh IDs
+      _notificationIdMap.removeWhere((key, _) => key.startsWith('${medicine.id}|'));
+      
       // Delay to ensure cancellation completes before scheduling
       // Use longer delay on iOS to avoid hitting system limits
       final delayMs = Platform.isIOS ? 750 : 100;
       await Future.delayed(Duration(milliseconds: delayMs));
       print('[NotificationService] Waited ${delayMs}ms after cancellation before rescheduling (iOS: ${Platform.isIOS})');
       
-      final medicinePart = _medicinePart(medicine.id);
-      print('[NotificationService] Medicine part (for ID calculation): $medicinePart');
-      
       int totalNotificationsScheduled = 0;
       int totalNotificationsFailed = 0;
       final Set<int> scheduledIds = <int>{}; // Track IDs scheduled in this call
       
-      for (var si = 0; si < medicine.schedules.length; si++) {
-        final schedule = medicine.schedules[si];
-        print('[NotificationService] Processing schedule $si: eye=${schedule.eye.name}, days=${schedule.daysOfWeek}, times=${schedule.times}');
+      for (final schedule in medicine.schedules) {
+        print('[NotificationService] Processing schedule ${schedule.id}: eye=${schedule.eye.name}, days=${schedule.daysOfWeek}, times=${schedule.times}');
         
         for (final dayOfWeek in schedule.daysOfWeek) {
           for (var ti = 0; ti < schedule.times.length; ti++) {
@@ -566,6 +610,7 @@ class NotificationService {
               final scheduledDateStr = '${scheduledLocal.year}-${scheduledLocal.month.toString().padLeft(2, '0')}-${scheduledLocal.day.toString().padLeft(2, '0')}';
               final payload = jsonEncode({
                 'medicineId': medicine.id,
+                'scheduleId': schedule.id,
                 'eye': schedule.eye.name,
                 'scheduledDate': scheduledDateStr,
                 'scheduledTime': time,
@@ -651,7 +696,7 @@ class NotificationService {
                 });
                 // #endregion
                 
-                final id = _id(medicinePart, si, dayOfWeek, ti, offset);
+                final id = await _getId(medicine.id, schedule.id, dayOfWeek, ti, offset);
                 
                 // Skip this notification if it's already in the past (using local time comparison)
                 final notificationTimeDiff = notificationTimeLocal.difference(systemNow);
@@ -670,15 +715,15 @@ class NotificationService {
                 
                 // Validate ID is within 32-bit signed integer range
                 const max32BitInt = 2147483647;
-                if (id > max32BitInt || id < -2147483648) {
-                  print('[NotificationService] ✗ ERROR: Calculated ID $id is outside 32-bit integer range!');
-                  print('[NotificationService]   Components: medicinePart=$medicinePart, scheduleIndex=$si, dayOfWeek=$dayOfWeek, timeIndex=$ti, offset=$offset');
+                if (id > max32BitInt || id < 1) {
+                  print('[NotificationService] ✗ ERROR: Notification ID $id is outside valid range (1-$max32BitInt)!');
+                  print('[NotificationService]   Components: medicineId=${medicine.id}, scheduleId=${schedule.id}, dayOfWeek=$dayOfWeek, timeIndex=$ti, offset=$offset');
                 }
                 
                 // Check for duplicate IDs within this scheduling call
                 if (scheduledIds.contains(id)) {
                   print('[NotificationService] ✗ WARNING: Duplicate ID detected within same scheduling call: $id');
-                  print('[NotificationService]   Components: mp=$medicinePart, si=$si, dow=$dayOfWeek, ti=$ti, off=$offset');
+                  print('[NotificationService]   Components: medicineId=${medicine.id}, scheduleId=${schedule.id}, dow=$dayOfWeek, ti=$ti, off=$offset');
                   print('[NotificationService]   This notification will be skipped to avoid duplicates');
                   totalNotificationsFailed++;
                   continue;
@@ -701,7 +746,7 @@ class NotificationService {
                 _schedulingIds.add(id);
                 
                 print('[NotificationService] Scheduling notification:');
-                print('  - ID: $id (components: mp=$medicinePart, si=$si, dow=$dayOfWeek, ti=$ti, off=$offset)');
+                print('  - ID: $id (medicineId=${medicine.id}, scheduleId=${schedule.id}, dow=$dayOfWeek, ti=$ti, off=$offset)');
                 print('  - Type: ${offset == 0 ? "At scheduled time" : offset == 1 ? "10 min before" : "15 min before"}');
                 print('  - Message: $message');
                 print('  - Notification time (local): $notificationTimeLocal');
@@ -806,17 +851,18 @@ class NotificationService {
         }
       }
     } catch (e, stackTrace) {
-      // Clean up tracking on error
-      final medicinePart = _medicinePart(medicine.id);
-      for (var si = 0; si < medicine.schedules.length; si++) {
-        final schedule = medicine.schedules[si];
-        for (final dayOfWeek in schedule.daysOfWeek) {
-          for (var ti = 0; ti < schedule.times.length; ti++) {
-            for (var offset = 0; offset < 4; offset++) {
-              _schedulingIds.remove(_id(medicinePart, si, dayOfWeek, ti, offset));
-            }
-          }
+      // Clean up tracking on error - remove all IDs for this medicine
+      // Clear notification ID mappings for this medicine (which will also clear associated scheduling IDs)
+      final keysToRemove = <String>[];
+      for (final entry in _notificationIdMap.entries) {
+        if (entry.key.startsWith('${medicine.id}|')) {
+          keysToRemove.add(entry.key);
+          // Also remove from scheduling set if present
+          _schedulingIds.remove(entry.value);
         }
+      }
+      for (final key in keysToRemove) {
+        _notificationIdMap.remove(key);
       }
       print('[NotificationService] ✗ FATAL ERROR scheduling notifications for medicine ${medicine.name}: $e');
       print('[NotificationService] Stack trace: $stackTrace');
@@ -827,7 +873,6 @@ class NotificationService {
   static Future<void> cancelForMedicine(String medicineId, {Medicine? medicine}) async {
     print('[NotificationService] Cancelling notifications for medicine ID: $medicineId');
     try {
-      final medicinePart = _medicinePart(medicineId);
       int cancelledCount = 0;
       int attemptedCount = 0;
       
@@ -837,32 +882,35 @@ class NotificationService {
         
         // Calculate total notifications to cancel for progress tracking
         int totalToCancel = 0;
-        for (var si = 0; si < medicine.schedules.length; si++) {
-          final schedule = medicine.schedules[si];
+        for (final schedule in medicine.schedules) {
           totalToCancel += schedule.daysOfWeek.length * schedule.times.length * 4; // 4 notifications per schedule
         }
         print('[NotificationService] Will attempt to cancel up to $totalToCancel notification(s)');
         
-        for (var si = 0; si < medicine.schedules.length; si++) {
-          final schedule = medicine.schedules[si];
+        for (final schedule in medicine.schedules) {
           for (final dayOfWeek in schedule.daysOfWeek) {
             for (var ti = 0; ti < schedule.times.length; ti++) {
               // Cancel all 4 notifications for this schedule (15min, 10min, 5min before, and at time)
               for (var offset = 0; offset < 4; offset++) {
-                final id = _id(medicinePart, si, dayOfWeek, ti, offset);
-                attemptedCount++;
-                try {
-                  await _plugin.cancel(id);
-                  cancelledCount++;
-                } catch (e) {
-                  // Ignore errors when cancelling (notification may not exist)
-                }
-                
-                // Throttle to avoid Android rate limits (5 cancellations per second)
-                // Delay 250ms after each cancellation to stay well under the limit
-                // Skip delay only on the very last cancellation
-                if (attemptedCount < totalToCancel) {
-                  await Future.delayed(const Duration(milliseconds: 250));
+                final key = '$medicineId|${schedule.id}|$dayOfWeek|$ti|$offset';
+                final id = _notificationIdMap[key];
+                if (id != null) {
+                  attemptedCount++;
+                  try {
+                    await _plugin.cancel(id);
+                    cancelledCount++;
+                    // Remove from map after successful cancellation
+                    _notificationIdMap.remove(key);
+                  } catch (e) {
+                    // Ignore errors when cancelling (notification may not exist)
+                  }
+                  
+                  // Throttle to avoid Android rate limits (5 cancellations per second)
+                  // Delay 250ms after each cancellation to stay well under the limit
+                  // Skip delay only on the very last cancellation
+                  if (attemptedCount < totalToCancel) {
+                    await Future.delayed(const Duration(milliseconds: 250));
+                  }
                 }
               }
             }
@@ -874,30 +922,27 @@ class NotificationService {
         print('[NotificationService] WARNING: Medicine object not provided, using fallback cancellation (may be slow)');
         print('[NotificationService] This will attempt to cancel up to ${100 * 7 * 100 * 4} potential IDs');
         
-        // Use a more conservative approach: cancel in batches with small delays
-        // But limit to reasonable bounds based on typical usage
-        const maxSchedules = 10; // Reasonable upper bound
-        const maxTimesPerSchedule = 20; // Reasonable upper bound
+        // Fallback: cancel all notifications for this medicine from our ID map
+        // This is less efficient but works when we don't have the medicine object
+        final keysToCancel = _notificationIdMap.entries
+            .where((entry) => entry.key.startsWith('$medicineId|'))
+            .toList();
         
-        for (var si = 0; si < maxSchedules; si++) {
-          for (var d = 1; d <= 7; d++) {
-            for (var ti = 0; ti < maxTimesPerSchedule; ti++) {
-              // Cancel all 4 notifications for each schedule
-              for (var offset = 0; offset < 4; offset++) {
-                final id = _id(medicinePart, si, d, ti, offset);
-                attemptedCount++;
-                try {
-                  await _plugin.cancel(id);
-                  cancelledCount++;
-                } catch (e) {
-                  // Ignore errors when cancelling (notification may not exist)
-                }
-                
-                // Throttle to avoid Android rate limits (5 cancellations per second)
-                // Delay 250ms after each cancellation to stay well under the limit
-                await Future.delayed(const Duration(milliseconds: 250));
-              }
-            }
+        for (final entry in keysToCancel) {
+          attemptedCount++;
+          try {
+            await _plugin.cancel(entry.value);
+            cancelledCount++;
+            _notificationIdMap.remove(entry.key);
+          } catch (e) {
+            // Ignore errors when cancelling (notification may not exist)
+          }
+          
+          // Throttle to avoid Android rate limits (5 cancellations per second)
+          // Delay 250ms after each cancellation to stay well under the limit
+          // Skip delay only on the very last cancellation
+          if (attemptedCount < keysToCancel.length) {
+            await Future.delayed(const Duration(milliseconds: 250));
           }
         }
         print('[NotificationService] Cancelled $cancelledCount notification(s) (attempted $attemptedCount IDs with throttling)');
@@ -951,6 +996,10 @@ class NotificationService {
     
     // Don't cancel all at once - let each scheduleForMedicine handle its own cancellation
     // This avoids potential iOS issues with cancelAll() and provides better control
+    // Clear notification ID mappings since we're rescheduling everything
+    // Old IDs will be cancelled and new ones will be assigned
+    _clearNotificationIdMappings();
+    
     final medicines = storageToUse.getMedicines();
     print('[NotificationService] Found ${medicines.length} medicine(s) to reschedule');
     
@@ -1111,9 +1160,7 @@ class NotificationService {
     final List<ScheduledNotificationInfo> notifications = [];
     
     for (final medicine in medicines) {
-      final medicinePart = _medicinePart(medicine.id);
-      for (var si = 0; si < medicine.schedules.length; si++) {
-        final schedule = medicine.schedules[si];
+      for (final schedule in medicine.schedules) {
         for (final dayOfWeek in schedule.daysOfWeek) {
           for (var ti = 0; ti < schedule.times.length; ti++) {
             final time = schedule.times[ti];
@@ -1141,6 +1188,7 @@ class NotificationService {
             final scheduledDateStr = '${scheduled.year}-${scheduled.month.toString().padLeft(2, '0')}-${scheduled.day.toString().padLeft(2, '0')}';
             final payload = jsonEncode({
               'medicineId': medicine.id,
+              'scheduleId': schedule.id,
               'eye': schedule.eye.name,
               'scheduledDate': scheduledDateStr,
               'scheduledTime': time,
@@ -1159,7 +1207,9 @@ class NotificationService {
               final minutesBefore = notifTime['minutes'] as int;
               final message = notifTime['message'] as String;
               final notificationTime = scheduled.subtract(Duration(minutes: minutesBefore));
-              final id = _id(medicinePart, si, dayOfWeek, ti, offset);
+              // Look up ID from map, or use 0 if not found (notification may not be scheduled yet)
+              final key = '${medicine.id}|${schedule.id}|$dayOfWeek|$ti|$offset';
+              final id = _notificationIdMap[key] ?? 0;
               
               notifications.add(ScheduledNotificationInfo(
                 id: id,

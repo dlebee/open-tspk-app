@@ -117,7 +117,6 @@ class _LogDoseDialogState extends ConsumerState<LogDoseDialog> {
               ? null
               : () async {
                   final dose = MedicineDose(
-                    id: DateTime.now().millisecondsSinceEpoch.toString(),
                     medicineId: _medicine!.id,
                     medicineName: _medicine!.name,
                     eye: _eye,

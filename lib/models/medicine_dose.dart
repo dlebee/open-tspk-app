@@ -1,4 +1,8 @@
+import 'package:uuid/uuid.dart';
+
 import 'medicine.dart';
+
+const _uuid = Uuid();
 
 enum DoseStatus { taken, skipped }
 
@@ -14,7 +18,7 @@ class MedicineDose {
   final DateTime? takenAt;
 
   MedicineDose({
-    required this.id,
+    String? id,
     required this.medicineId,
     this.medicineName,
     required this.eye,
@@ -23,7 +27,7 @@ class MedicineDose {
     this.scheduledDate,
     this.scheduledTime,
     this.takenAt,
-  });
+  }) : id = id ?? _uuid.v4();
 
   MedicineDose copyWith({
     String? id,
@@ -62,7 +66,7 @@ class MedicineDose {
       };
 
   factory MedicineDose.fromJson(Map<String, dynamic> json) => MedicineDose(
-        id: json['id'] as String,
+        id: json['id'] as String? ?? _uuid.v4(),
         medicineId: json['medicineId'] as String,
         medicineName: json['medicineName'] as String?,
         eye: Eye.values.firstWhere(

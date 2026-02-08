@@ -143,7 +143,7 @@ class MedicinesNotifier extends StateNotifier<AsyncValue<List<Medicine>>> {
   Future<void> delete(String id) async {
     final list = state.valueOrNull ?? [];
     // Get the medicine before deleting it so we can cancel its notifications efficiently
-    final medicine = list.firstWhere((m) => m.id == id, orElse: () => Medicine(id: '', name: '', schedules: [], createdAt: DateTime.now()));
+    final medicine = list.firstWhere((m) => m.id == id, orElse: () => Medicine(name: '', schedules: [], createdAt: DateTime.now()));
     final updated = list.where((m) => m.id != id).toList();
     await _storage.saveMedicines(updated);
     state = AsyncValue.data(updated);

@@ -115,7 +115,6 @@ class LogScheduledDoseDialog extends ConsumerWidget {
     final recordedAt = status == DoseStatus.skipped ? scheduledDateTime : DateTime.now();
     
     final newDose = MedicineDose(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
       medicineId: dose.medicineId,
       medicineName: dose.medicineName,
       eye: dose.eye,

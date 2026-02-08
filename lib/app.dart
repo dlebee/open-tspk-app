@@ -1,13 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'models/medicine.dart';
+import 'models/medicine_dose.dart';
+import 'models/medicine_schedule.dart';
+import 'models/scheduled_dose.dart';
 import 'providers/dose_provider.dart';
+import 'providers/medicine_provider.dart';
 import 'providers/storage_provider.dart';
 import 'providers/theme_provider.dart';
 import 'services/notification_service.dart';
 import 'screens/activity_log_screen.dart';
 import 'screens/appointments_screen.dart';
 import 'screens/calendar_screen.dart';
+import 'widgets/log_scheduled_dose_dialog.dart';
 import 'widgets/taken_time_picker.dart';
 import 'screens/flare_ups_screen.dart';
 import 'screens/home_screen.dart';
@@ -51,6 +57,12 @@ class _ThygesonAppState extends ConsumerState<ThygesonApp> {
         );
       }
     });
+    NotificationService.setOnNotificationTapped((medicineId, scheduleId, eyeStr, scheduledDate, scheduledTime) {
+      final ctx = navigatorKey.currentContext;
+      if (ctx != null) {
+        _handleNotificationTap(ctx, ref, medicineId, scheduleId, eyeStr, scheduledDate, scheduledTime);
+      }
+    });
     final highContrast = ref.watch(highContrastProvider);
     return MaterialApp(
       navigatorKey: navigatorKey,
@@ -79,6 +91,123 @@ class _ThygesonAppState extends ConsumerState<ThygesonApp> {
       ),
     );
   }
+
+  void _handleNotificationTap(
+    BuildContext context,
+    WidgetRef ref,
+    String medicineId,
+    String scheduleId,
+    String eyeStr,
+    String scheduledDate,
+    String scheduledTime,
+  ) {
+    // Navigate to home screen
+    _MainNavigatorState.navigateToHome();
+    
+    // Pop any dialogs or modals that might be open
+    Navigator.of(context).popUntil((route) => route.isFirst);
+    
+    // Get medicine and verify scheduleId matches
+    final medicines = ref.read(medicinesProvider).valueOrNull ?? [];
+    final medicine = medicines.firstWhere(
+      (m) => m.id == medicineId,
+      orElse: () => Medicine(name: 'Unknown', schedules: [], createdAt: DateTime.now()),
+    );
+    
+    // Find schedule by ID and verify it matches
+    MedicineSchedule? schedule;
+    try {
+      schedule = medicine.schedules.firstWhere((s) => s.id == scheduleId);
+      // Verify eye matches
+      if (schedule.eye.name != eyeStr) {
+        print('[App] Warning: Schedule ${schedule.id} eye mismatch (expected ${schedule.eye.name}, got $eyeStr)');
+      }
+      // Verify time is in this schedule
+      if (!schedule.times.contains(scheduledTime)) {
+        print('[App] Warning: Schedule ${schedule.id} does not contain time $scheduledTime');
+      }
+    } catch (_) {
+      print('[App] Warning: Schedule with ID $scheduleId not found for medicine ${medicine.id}');
+    }
+    
+    final medicineName = medicine.name;
+    
+    // Parse eye
+    final eye = Eye.values.firstWhere(
+      (e) => e.name == eyeStr,
+      orElse: () => Eye.both,
+    );
+    
+    // Parse scheduled date
+    final scheduledDt = DateTime.parse(scheduledDate);
+    
+    // Check if dose already exists (matching by medicineId, eye, date, and time)
+    // Note: We've verified the scheduleId above
+    final doses = ref.read(dosesProvider).valueOrNull ?? [];
+    MedicineDose? existingDose;
+    try {
+      existingDose = doses.firstWhere(
+        (d) =>
+            d.medicineId == medicineId &&
+            d.eye == eye &&
+            d.scheduledDate != null &&
+            d.scheduledDate!.year == scheduledDt.year &&
+            d.scheduledDate!.month == scheduledDt.month &&
+            d.scheduledDate!.day == scheduledDt.day &&
+            d.scheduledTime == scheduledTime,
+      );
+    } catch (_) {
+      // No existing dose found
+    }
+    
+    // Determine status
+    final parts = scheduledTime.split(':');
+    final scheduledDateTime = DateTime(
+      scheduledDt.year,
+      scheduledDt.month,
+      scheduledDt.day,
+      int.parse(parts[0]),
+      parts.length > 1 ? int.parse(parts[1]) : 0,
+    );
+    
+    ScheduledDoseStatus status;
+    DateTime? takenAt;
+    if (existingDose != null) {
+      if (existingDose.status == DoseStatus.taken) {
+        status = ScheduledDoseStatus.taken;
+        takenAt = existingDose.takenAt ?? existingDose.recordedAt;
+      } else {
+        status = ScheduledDoseStatus.skipped;
+      }
+    } else {
+      // No existing dose - check if scheduled time has passed
+      status = scheduledDateTime.isBefore(DateTime.now())
+          ? ScheduledDoseStatus.missed
+          : ScheduledDoseStatus.scheduled;
+    }
+    
+    final scheduledDose = ScheduledDose(
+      medicineId: medicineId,
+      medicineName: medicineName,
+      eye: eye,
+      scheduledDate: scheduledDt,
+      scheduledTime: scheduledTime,
+      status: status,
+      takenAt: takenAt,
+      dose: existingDose,
+    );
+    
+    // Show dialog after a short delay to ensure navigation is complete
+    Future.delayed(const Duration(milliseconds: 100), () {
+      final ctx = navigatorKey.currentContext;
+      if (ctx != null) {
+        showDialog(
+          context: ctx,
+          builder: (dialogCtx) => LogScheduledDoseDialog(dose: scheduledDose),
+        );
+      }
+    });
+  }
 }
 
 class MainNavigator extends StatefulWidget {
@@ -90,6 +219,26 @@ class MainNavigator extends StatefulWidget {
 
 class _MainNavigatorState extends State<MainNavigator> {
   int _index = 0;
+  
+  static _MainNavigatorState? _instance;
+  
+  @override
+  void initState() {
+    super.initState();
+    _instance = this;
+  }
+  
+  @override
+  void dispose() {
+    _instance = null;
+    super.dispose();
+  }
+  
+  static void navigateToHome() {
+    _instance?.setState(() {
+      _instance!._index = 0;
+    });
+  }
 
   static const _screens = [
     HomeScreen(),

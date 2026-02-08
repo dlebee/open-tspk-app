@@ -183,8 +183,7 @@ class _LogFlareUpFormState extends State<LogFlareUpForm> {
                     onPressed: (_leftPain != null || _rightPain != null)
                         ? () {
                             widget.onSave(FlareUp(
-                              id: widget.existing?.id ??
-                                  DateTime.now().millisecondsSinceEpoch.toString(),
+                              id: widget.existing?.id,
                               date: _date,
                               leftEye: _leftPain != null,
                               rightEye: _rightPain != null,
