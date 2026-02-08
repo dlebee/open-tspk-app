@@ -33,6 +33,7 @@ class NotificationService {
   static IStorageService? _storage;
   static void Function(String medicineId, String eye, String scheduledDate, String scheduledTime)? _onOverrideTimeRequested;
   static void Function()? _onDoseAdded;
+  static void Function(String medicineId, String scheduleId, String eye, String scheduledDate, String scheduledTime)? _onNotificationTapped;
   
   // Track notification ID assignments for cancellation
   // Key: 'medicineId|scheduleId|dayOfWeek|timeIndex|offset'
@@ -51,6 +52,10 @@ class NotificationService {
 
   static void setOnDoseAdded(void Function() fn) {
     _onDoseAdded = fn;
+  }
+
+  static void setOnNotificationTapped(void Function(String medicineId, String scheduleId, String eye, String scheduledDate, String scheduledTime) fn) {
+    _onNotificationTapped = fn;
   }
 
   static Future<void> init() async {
@@ -117,8 +122,17 @@ class NotificationService {
       );
       final initialized = await _plugin.initialize(
         InitializationSettings(android: android, iOS: ios),
+        onDidReceiveNotificationResponse: _onNotificationTap,
       );
       print('[NotificationService] Plugin initialized: $initialized');
+      print('[NotificationService] Notification tap handler registered');
+      
+      // #region agent log
+      _debugLog('notification_service.dart:init', 'Plugin initialized with tap handler', {
+        'initialized': initialized,
+        'platform': Platform.operatingSystem,
+      });
+      // #endregion
       
       // Create notification channel for Android
       if (Platform.isAndroid) {
@@ -172,6 +186,25 @@ class NotificationService {
       
       print('[NotificationService] Initialization complete');
       
+      // Handle the case where the app is LAUNCHED from a notification tap
+      final launchDetails = await _plugin.getNotificationAppLaunchDetails();
+      if (launchDetails?.didNotificationLaunchApp ?? false) {
+        final launchResponse = launchDetails?.notificationResponse;
+        if (launchResponse != null) {
+          print('[NotificationService] 🔔 App launched from notification tap!');
+          // #region agent log
+          _debugLog('notification_service.dart:init', 'App launched from notification', {
+            'actionId': launchResponse.actionId,
+            'notificationId': launchResponse.id,
+            'payload': launchResponse.payload,
+            'input': launchResponse.input,
+          });
+          // #endregion
+          // Handle the tap (just log it)
+          _onNotificationTap(launchResponse);
+        }
+      }
+      
       // Log permission status after initialization
       await logPermissionStatus();
     } catch (e, stackTrace) {
@@ -181,6 +214,76 @@ class NotificationService {
     }
   }
 
+  /// Handle notification tap - logs and triggers callback if set
+  static void _onNotificationTap(NotificationResponse response) {
+    print('[NotificationService] ========================================');
+    print('[NotificationService] 🔔 NOTIFICATION TAPPED!');
+    print('[NotificationService] ========================================');
+    print('[NotificationService] actionId: ${response.actionId}');
+    print('[NotificationService] notificationId: ${response.id}');
+    print('[NotificationService] payload: ${response.payload}');
+    print('[NotificationService] input: ${response.input}');
+    print('[NotificationService] ========================================');
+    
+    // #region agent log
+    _debugLog('notification_service.dart:_onNotificationTap', 'Notification tapped', {
+      'actionId': response.actionId,
+      'notificationId': response.id,
+      'payload': response.payload,
+      'input': response.input,
+      'timestamp': DateTime.now().millisecondsSinceEpoch,
+    });
+    // #endregion
+    
+    // Parse payload and trigger callback
+    try {
+      if (response.payload != null) {
+        final map = jsonDecode(response.payload!) as Map<String, dynamic>;
+        final medicineId = map['medicineId'] as String?;
+        final scheduleId = map['scheduleId'] as String?;
+        final eyeStr = map['eye'] as String?;
+        final scheduledDate = map['scheduledDate'] as String?;
+        final scheduledTime = map['scheduledTime'] as String?;
+        
+        print('[NotificationService] Parsed payload:');
+        print('[NotificationService]   - medicineId: $medicineId');
+        print('[NotificationService]   - scheduleId: $scheduleId');
+        print('[NotificationService]   - eye: $eyeStr');
+        print('[NotificationService]   - scheduledDate: $scheduledDate');
+        print('[NotificationService]   - scheduledTime: $scheduledTime');
+        
+        // #region agent log
+        _debugLog('notification_service.dart:_onNotificationTap', 'Parsed notification payload', {
+          'medicineId': medicineId,
+          'scheduleId': scheduleId,
+          'eye': eyeStr,
+          'scheduledDate': scheduledDate,
+          'scheduledTime': scheduledTime,
+        });
+        // #endregion
+        
+        // Trigger callback if all required fields are present and callback is set
+        if (medicineId != null && scheduleId != null && eyeStr != null && scheduledDate != null && scheduledTime != null) {
+          if (_onNotificationTapped != null) {
+            print('[NotificationService] Triggering notification tap callback');
+            _onNotificationTapped!(medicineId, scheduleId, eyeStr, scheduledDate, scheduledTime);
+          } else {
+            print('[NotificationService] ⚠️ Notification tap callback not set');
+          }
+        } else {
+          print('[NotificationService] ⚠️ Missing required fields in payload');
+        }
+      }
+    } catch (e) {
+      print('[NotificationService] Could not parse payload: $e');
+      // #region agent log
+      _debugLog('notification_service.dart:_onNotificationTap', 'Failed to parse payload', {
+        'error': e.toString(),
+        'payload': response.payload,
+      });
+      // #endregion
+    }
+  }
 
   static Future<void> _addDose(String medicineId, Eye eye, DateTime scheduledDate, String scheduledTime, DoseStatus status, DateTime? takenAt) async {
     final storage = _storage;

@@ -57,6 +57,18 @@ class _ThygesonAppState extends ConsumerState<ThygesonApp> {
         );
       }
     });
+    NotificationService.setOnNotificationTapped((medicineId, scheduleId, eyeStr, scheduledDate, scheduledTime) {
+      // Navigate to home screen first
+      _MainNavigatorState.navigateToHome();
+      
+      // Wait a moment for navigation to complete, then show dialog
+      Future.delayed(const Duration(milliseconds: 300), () {
+        final ctx = navigatorKey.currentContext;
+        if (ctx != null) {
+          _handleNotificationTap(ctx, ref, medicineId, scheduleId, eyeStr, scheduledDate, scheduledTime);
+        }
+      });
+    });
     final highContrast = ref.watch(highContrastProvider);
     return MaterialApp(
       navigatorKey: navigatorKey,
@@ -84,6 +96,125 @@ class _ThygesonAppState extends ConsumerState<ThygesonApp> {
         displayColor: Colors.black,
       ),
     );
+  }
+
+  void _handleNotificationTap(
+    BuildContext context,
+    WidgetRef ref,
+    String medicineId,
+    String scheduleId,
+    String eyeStr,
+    String scheduledDate,
+    String scheduledTime,
+  ) {
+    // Pop any dialogs or modals that might be open
+    Navigator.of(context).popUntil((route) => route.isFirst);
+    
+    // Get medicine and schedule to create ScheduledDose
+    final medicines = ref.read(medicinesProvider).valueOrNull ?? [];
+    final medicine = medicines.firstWhere(
+      (m) => m.id == medicineId,
+      orElse: () => Medicine(name: 'Unknown', schedules: [], createdAt: DateTime.now()),
+    );
+    
+    // Find schedule by ID
+    MedicineSchedule? schedule;
+    try {
+      schedule = medicine.schedules.firstWhere((s) => s.id == scheduleId);
+    } catch (_) {
+      print('[App] Warning: Schedule with ID $scheduleId not found for medicine ${medicine.id}');
+    }
+    
+    final medicineName = medicine.name;
+    final eye = Eye.values.firstWhere(
+      (e) => e.name == eyeStr,
+      orElse: () => Eye.both,
+    );
+    
+    // Parse scheduled date
+    final scheduledDt = DateTime.parse(scheduledDate);
+    
+    // Check if dose already exists
+    final doses = ref.read(dosesProvider).valueOrNull ?? [];
+    MedicineDose? existingDose;
+    try {
+      existingDose = doses.firstWhere(
+        (d) =>
+            d.medicineId == medicineId &&
+            d.eye == eye &&
+            d.scheduledDate != null &&
+            d.scheduledDate!.year == scheduledDt.year &&
+            d.scheduledDate!.month == scheduledDt.month &&
+            d.scheduledDate!.day == scheduledDt.day &&
+            d.scheduledTime == scheduledTime,
+      );
+    } catch (_) {
+      // No existing dose found
+    }
+    
+    // Determine status
+    final parts = scheduledTime.split(':');
+    final scheduledDateTime = DateTime(
+      scheduledDt.year,
+      scheduledDt.month,
+      scheduledDt.day,
+      int.parse(parts[0]),
+      parts.length > 1 ? int.parse(parts[1]) : 0,
+    );
+    
+    ScheduledDoseStatus status;
+    DateTime? takenAt;
+    if (existingDose != null) {
+      if (existingDose.status == DoseStatus.taken) {
+        status = ScheduledDoseStatus.taken;
+        takenAt = existingDose.takenAt ?? existingDose.recordedAt;
+      } else {
+        status = ScheduledDoseStatus.skipped;
+      }
+    } else {
+      // No existing dose - check if scheduled time has passed
+      status = scheduledDateTime.isBefore(DateTime.now())
+          ? ScheduledDoseStatus.missed
+          : ScheduledDoseStatus.scheduled;
+    }
+    
+    // Create scheduled dose - use schedule properties if available, otherwise generate from what we have
+    final scheduledDose = schedule != null
+        ? ScheduledDose(
+            medicineId: medicineId,
+            medicineName: medicineName,
+            eye: eye,
+            daysOfWeek: schedule.daysOfWeek,
+            times: schedule.times,
+            scheduledDate: scheduledDt,
+            scheduledTime: scheduledTime,
+            status: status,
+            takenAt: takenAt,
+            dose: existingDose,
+          )
+        : ScheduledDose(
+            medicineId: medicineId,
+            medicineName: medicineName,
+            eye: eye,
+            daysOfWeek: [], // Unknown if schedule not found
+            times: [scheduledTime], // Only know the specific time
+            scheduledDate: scheduledDt,
+            scheduledTime: scheduledTime,
+            status: status,
+            takenAt: takenAt,
+            dose: existingDose,
+          );
+    
+    // Show dialog after a short delay to ensure navigation is complete
+    Future.delayed(const Duration(milliseconds: 100), () {
+      final ctx = navigatorKey.currentContext;
+      if (ctx != null) {
+        showDialog(
+          context: ctx,
+          builder: (dialogCtx) => LogScheduledDoseDialog(dose: scheduledDose),
+        );
+      }
+    });
   }
 
 }
