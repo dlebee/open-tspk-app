@@ -53,6 +53,38 @@ class _NotificationExplorerScreenState extends State<NotificationExplorerScreen>
     return null;
   }
 
+  Future<void> _testNotification(Duration delay) async {
+    try {
+      await NotificationService.showTestNotification(delay: delay);
+      if (mounted) {
+        final seconds = delay.inSeconds;
+        String message;
+        if (seconds < 60) {
+          message = 'Test notification scheduled - should appear in $seconds seconds';
+        } else {
+          final minutes = delay.inMinutes;
+          message = 'Test notification scheduled - should appear in $minutes minute${minutes == 1 ? '' : 's'}';
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(message),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to schedule test notification: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
   Future<void> _rescheduleAll() async {
     if (!mounted) return;
     
@@ -181,6 +213,63 @@ class _NotificationExplorerScreenState extends State<NotificationExplorerScreen>
       appBar: AppBar(
         title: const Text('Notification Explorer'),
         actions: [
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.notification_important),
+            tooltip: 'Test Notifications',
+            onSelected: (value) {
+              if (value == '30s') {
+                _testNotification(const Duration(seconds: 30));
+              } else if (value == '1m') {
+                _testNotification(const Duration(minutes: 1));
+              } else if (value == '2m') {
+                _testNotification(const Duration(minutes: 2));
+              } else if (value == '3m') {
+                _testNotification(const Duration(minutes: 3));
+              }
+            },
+            itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: '30s',
+                child: Row(
+                  children: [
+                    Icon(Icons.timer, size: 20),
+                    SizedBox(width: 8),
+                    Text('Test in 30 seconds'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: '1m',
+                child: Row(
+                  children: [
+                    Icon(Icons.timer, size: 20),
+                    SizedBox(width: 8),
+                    Text('Test in 1 minute'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: '2m',
+                child: Row(
+                  children: [
+                    Icon(Icons.timer, size: 20),
+                    SizedBox(width: 8),
+                    Text('Test in 2 minutes'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: '3m',
+                child: Row(
+                  children: [
+                    Icon(Icons.timer, size: 20),
+                    SizedBox(width: 8),
+                    Text('Test in 3 minutes'),
+                  ],
+                ),
+              ),
+            ],
+          ),
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _loadNotifications,
@@ -375,23 +464,30 @@ class _NotificationCard extends StatelessWidget {
         title: Text(
           notification.title ?? 'No title',
           style: const TextStyle(fontWeight: FontWeight.bold),
+          overflow: TextOverflow.ellipsis,
         ),
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const SizedBox(height: 4),
-            Text(notification.body ?? 'No body'),
+            Text(
+              notification.body ?? 'No body',
+              overflow: TextOverflow.ellipsis,
+            ),
             if (parsedScheduledTime != null) ...[
               const SizedBox(height: 4),
               Row(
                 children: [
                   Icon(Icons.schedule, size: 14, color: Theme.of(context).colorScheme.primary),
                   const SizedBox(width: 4),
-                  Text(
-                    'Dose scheduled: ${DateFormat('MMM d, y • HH:mm').format(parsedScheduledTime)}',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Theme.of(context).colorScheme.primary,
+                  Expanded(
+                    child: Text(
+                      'Dose scheduled: ${DateFormat('MMM d, y • HH:mm').format(parsedScheduledTime)}',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                 ],
@@ -403,11 +499,14 @@ class _NotificationCard extends StatelessWidget {
                 children: [
                   Icon(Icons.notifications_active, size: 14, color: Colors.blue),
                   const SizedBox(width: 4),
-                  Text(
-                    'Notification fires: ${DateFormat('MMM d, y • HH:mm').format(notificationTriggerTime)}',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: Colors.blue,
+                  Expanded(
+                    child: Text(
+                      'Notification fires: ${DateFormat('MMM d, y • HH:mm').format(notificationTriggerTime)}',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Colors.blue,
+                      ),
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                 ],
@@ -419,12 +518,15 @@ class _NotificationCard extends StatelessWidget {
                 children: [
                   Icon(Icons.access_time, size: 14, color: Colors.green),
                   const SizedBox(width: 4),
-                  Text(
-                    'Time until notification: ${_formatDuration(timeUntil)}',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: Colors.green,
-                      fontWeight: FontWeight.w500,
+                  Expanded(
+                    child: Text(
+                      'Time until notification: ${_formatDuration(timeUntil)}',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Colors.green,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                 ],

@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:timezone/data/latest_all.dart' as tz_data;
 import 'package:timezone/timezone.dart' as tz;
 
@@ -50,44 +51,44 @@ class NotificationService {
       tz_data.initializeTimeZones();
       print('[NotificationService] Timezone data initialized');
       
-      // Try to determine and set the local timezone using the system offset
-      // Since flutter_native_timezone has build issues, we'll use a workaround
+      // Get the device's actual timezone using flutter_timezone
       final systemNow = DateTime.now();
-      final offsetHours = systemNow.timeZoneOffset.inHours;
-      print('[NotificationService] System timezone offset: ${systemNow.timeZoneOffset} (${offsetHours} hours)');
+      print('[NotificationService] System timezone offset: ${systemNow.timeZoneOffset}');
       
-      // Try to find a matching timezone by offset
-      // Common timezones: America/New_York (-5), America/Chicago (-6), America/Denver (-7), America/Los_Angeles (-8)
-      // Europe/London (0), Europe/Paris (+1), Asia/Tokyo (+9), etc.
-      String? timezoneName;
-      if (offsetHours == -5) {
-        timezoneName = 'America/New_York'; // EST/EDT
-      } else if (offsetHours == -6) {
-        timezoneName = 'America/Chicago'; // CST/CDT
-      } else if (offsetHours == -7) {
-        timezoneName = 'America/Denver'; // MST/MDT
-      } else if (offsetHours == -8) {
-        timezoneName = 'America/Los_Angeles'; // PST/PDT
-      } else if (offsetHours == 0) {
-        timezoneName = 'Europe/London'; // GMT/BST
-      } else if (offsetHours == 1) {
-        timezoneName = 'Europe/Paris'; // CET/CEST
-      } else if (offsetHours == 9) {
-        timezoneName = 'Asia/Tokyo'; // JST
-      }
-      
-      if (timezoneName != null) {
-        try {
-          final location = tz.getLocation(timezoneName);
-          tz.setLocalLocation(location);
-          print('[NotificationService] Set local timezone to: ${tz.local.name} (based on offset ${offsetHours}h)');
-        } catch (e) {
-          print('[NotificationService] WARNING: Could not set timezone $timezoneName: $e');
-          print('[NotificationService] Falling back to UTC');
+      try {
+        final timezoneInfo = await FlutterTimezone.getLocalTimezone();
+        final timezoneName = timezoneInfo.identifier;
+        print('[NotificationService] Device timezone (from flutter_timezone): $timezoneName');
+        
+        final location = tz.getLocation(timezoneName);
+        tz.setLocalLocation(location);
+        print('[NotificationService] Set local timezone to: ${tz.local.name}');
+      } catch (e) {
+        print('[NotificationService] WARNING: Could not get device timezone: $e');
+        // Fallback: try to match by offset (less reliable but better than UTC)
+        final offsetHours = systemNow.timeZoneOffset.inHours;
+        final offsetMinutes = systemNow.timeZoneOffset.inMinutes % 60;
+        print('[NotificationService] Falling back to offset-based detection: ${offsetHours}h ${offsetMinutes}m');
+        
+        String? fallbackTimezone;
+        if (offsetHours == -5 && offsetMinutes == 0) fallbackTimezone = 'America/New_York';
+        else if (offsetHours == -6 && offsetMinutes == 0) fallbackTimezone = 'America/Chicago';
+        else if (offsetHours == -7 && offsetMinutes == 0) fallbackTimezone = 'America/Denver';
+        else if (offsetHours == -8 && offsetMinutes == 0) fallbackTimezone = 'America/Los_Angeles';
+        else if (offsetHours == 0 && offsetMinutes == 0) fallbackTimezone = 'Europe/London';
+        else if (offsetHours == 1 && offsetMinutes == 0) fallbackTimezone = 'Europe/Paris';
+        else if (offsetHours == 9 && offsetMinutes == 0) fallbackTimezone = 'Asia/Tokyo';
+        
+        if (fallbackTimezone != null) {
+          try {
+            tz.setLocalLocation(tz.getLocation(fallbackTimezone));
+            print('[NotificationService] Set fallback timezone to: ${tz.local.name}');
+          } catch (e2) {
+            print('[NotificationService] WARNING: Fallback timezone also failed: $e2. Using UTC.');
+          }
+        } else {
+          print('[NotificationService] WARNING: Unknown timezone offset, using UTC. Notifications may fire at wrong times.');
         }
-      } else {
-        print('[NotificationService] WARNING: Unknown timezone offset ${offsetHours}h, using UTC');
-        print('[NotificationService] Notifications may be scheduled at incorrect times');
       }
       
       print('[NotificationService] System local time: $systemNow');
@@ -95,9 +96,38 @@ class NotificationService {
       print('[NotificationService] System date: ${systemNow.year}-${systemNow.month.toString().padLeft(2, '0')}-${systemNow.day.toString().padLeft(2, '0')}');
       
       const android = AndroidInitializationSettings('@mipmap/ic_launcher');
-      const ios = DarwinInitializationSettings();
+      // Configure iOS to show notifications even when app is in foreground
+      // Register notification categories with action buttons for iOS
+      final ios = DarwinInitializationSettings(
+        requestAlertPermission: true,
+        requestBadgePermission: true,
+        requestSoundPermission: true,
+        defaultPresentAlert: true, // Show alert when app is in foreground
+        defaultPresentSound: true, // Play sound when app is in foreground
+        defaultPresentBadge: true, // Update badge when app is in foreground
+        defaultPresentBanner: true, // Show banner when app is in foreground (iOS 15+)
+        defaultPresentList: true, // Show in notification center when app is in foreground
+        notificationCategories: [
+          DarwinNotificationCategory(
+            'thygeson_meds',
+            actions: <DarwinNotificationAction>[
+              DarwinNotificationAction.plain('skip', 'Skip'),
+              DarwinNotificationAction.plain('taken_on_time', 'Taken on time'),
+              DarwinNotificationAction.plain('taken_now', 'Taken now'),
+              DarwinNotificationAction.plain('taken_at_override', 'Taken at...', 
+                options: <DarwinNotificationActionOption>{
+                  DarwinNotificationActionOption.foreground,
+                },
+              ),
+            ],
+            options: <DarwinNotificationCategoryOption>{
+              DarwinNotificationCategoryOption.hiddenPreviewShowTitle,
+            },
+          ),
+        ],
+      );
       final initialized = await _plugin.initialize(
-        const InitializationSettings(android: android, iOS: ios),
+        InitializationSettings(android: android, iOS: ios),
         onDidReceiveNotificationResponse: _onNotificationResponse,
       );
       print('[NotificationService] Plugin initialized: $initialized');
@@ -715,6 +745,23 @@ class NotificationService {
       print('[NotificationService]   - Successfully scheduled: $totalNotificationsScheduled');
       print('[NotificationService]   - Failed: $totalNotificationsFailed');
       print('[NotificationService]   - Unique IDs scheduled: ${scheduledIds.length}');
+      
+      // Check iOS 64 pending notification limit
+      if (Platform.isIOS) {
+        try {
+          final pending = await _plugin.pendingNotificationRequests();
+          print('[NotificationService] iOS pending notifications: ${pending.length}/64');
+          if (pending.length > 64) {
+            print('[NotificationService] ⚠️ WARNING: iOS has a limit of 64 pending notifications.');
+            print('[NotificationService]   You have ${pending.length} scheduled. iOS will silently drop the extras (keeps the 64 soonest).');
+            print('[NotificationService]   Consider reducing notification frequency or number of medicines.');
+          } else if (pending.length > 50) {
+            print('[NotificationService] ⚠️ NOTICE: Approaching iOS 64 notification limit (${pending.length}/64).');
+          }
+        } catch (e) {
+          print('[NotificationService] Could not check pending notification count: $e');
+        }
+      }
     } catch (e, stackTrace) {
       // Clean up tracking on error
       final medicinePart = _medicinePart(medicine.id);
@@ -882,6 +929,58 @@ class NotificationService {
       return notifications;
     } catch (e, stackTrace) {
       print('[NotificationService] ✗ ERROR getting pending notifications: $e');
+      print('[NotificationService] Stack trace: $stackTrace');
+      rethrow;
+    }
+  }
+  
+  /// Fixed ID for test notifications - reusing the same ID cancels any previous test notification
+  static const int _testNotificationId = 999999;
+  
+  /// Schedule a test notification at a specific delay in the future (for testing/debugging)
+  /// Uses a fixed ID so re-scheduling replaces any previous test notification
+  static Future<void> showTestNotification({Duration delay = const Duration(seconds: 5)}) async {
+    print('[NotificationService] Scheduling test notification with delay: ${delay.inSeconds}s...');
+    
+    try {
+      // Cancel any existing test notification first
+      await _plugin.cancel(_testNotificationId);
+      
+      final now = tz.TZDateTime.now(tz.local);
+      final scheduledTime = now.add(delay);
+      
+      print('[NotificationService] Current time: $now');
+      print('[NotificationService] Scheduling test notification for: $scheduledTime');
+      print('[NotificationService] Time difference: ${delay.inSeconds} seconds');
+      
+      await _plugin.zonedSchedule(
+        _testNotificationId,
+        'Test Notification',
+        'This is a test notification from the Notification Explorer',
+        scheduledTime,
+        NotificationDetails(
+          android: AndroidNotificationDetails(
+            'thygeson_meds',
+            'Medicine reminders',
+            channelDescription: 'Reminders for scheduled medicine',
+            importance: Importance.high,
+            priority: Priority.high,
+            playSound: true,
+            enableVibration: true,
+          ),
+          iOS: const DarwinNotificationDetails(
+            presentAlert: true,
+            presentBadge: true,
+            presentSound: true,
+            categoryIdentifier: 'thygeson_meds',
+          ),
+        ),
+        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+        uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
+      );
+      print('[NotificationService] ✓ Test notification scheduled for $scheduledTime (ID: $_testNotificationId)');
+    } catch (e, stackTrace) {
+      print('[NotificationService] ✗ ERROR scheduling test notification: $e');
       print('[NotificationService] Stack trace: $stackTrace');
       rethrow;
     }
