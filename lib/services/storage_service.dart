@@ -28,6 +28,7 @@ abstract class IStorageService {
   Future<void> setNotificationReminderPreference(NotificationReminderPreference preference);
   int getNextNotificationId();
   Future<void> setNextNotificationId(int id);
+  Map<String, String> getAllPreferences();
   Future<void> wipeAllData();
 }
 
@@ -186,6 +187,22 @@ class LocalStorageService implements IStorageService {
   @override
   Future<void> setNextNotificationId(int id) async {
     await _preferences?.put('nextNotificationId', id.toString());
+  }
+
+  @override
+  Map<String, String> getAllPreferences() {
+    final prefs = <String, String>{};
+    if (_preferences == null) return prefs;
+    
+    // Get all keys from the preferences box
+    for (final key in _preferences!.keys) {
+      final value = _preferences!.get(key);
+      if (value != null) {
+        prefs[key.toString()] = value;
+      }
+    }
+    
+    return prefs;
   }
 
   /// Wipes all data from all boxes. This is irreversible.

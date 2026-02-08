@@ -142,6 +142,8 @@ List<ScheduledDose> _generateScheduledDosesForDate(
           medicineId: medicine.id,
           medicineName: matchingDose?.medicineName ?? medicine.name,
           eye: schedule.eye,
+          daysOfWeek: schedule.daysOfWeek,
+          times: schedule.times,
           scheduledDate: scheduledDate,
           scheduledTime: time,
           status: status,
@@ -176,10 +178,14 @@ List<ScheduledDose> _generateScheduledDosesForDate(
             : ScheduledDoseStatus.skipped;
         final takenAt = dose.takenAt ?? dose.recordedAt;
 
+        // For orphaned doses, we don't have schedule info, so use empty lists
+        // The scheduleId will be generated as a hash of just the eye
         result.add(ScheduledDose(
           medicineId: dose.medicineId,
           medicineName: dose.medicineName!,
           eye: dose.eye,
+          daysOfWeek: [], // Unknown for orphaned doses
+          times: [dose.scheduledTime!], // Only know the specific time
           scheduledDate: dateStr,
           scheduledTime: dose.scheduledTime!,
           status: status,

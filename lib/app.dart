@@ -186,16 +186,32 @@ class _ThygesonAppState extends ConsumerState<ThygesonApp> {
           : ScheduledDoseStatus.scheduled;
     }
     
-    final scheduledDose = ScheduledDose(
-      medicineId: medicineId,
-      medicineName: medicineName,
-      eye: eye,
-      scheduledDate: scheduledDt,
-      scheduledTime: scheduledTime,
-      status: status,
-      takenAt: takenAt,
-      dose: existingDose,
-    );
+    // Create scheduled dose - use schedule properties if available, otherwise generate from what we have
+    final scheduledDose = schedule != null
+        ? ScheduledDose(
+            medicineId: medicineId,
+            medicineName: medicineName,
+            eye: eye,
+            daysOfWeek: schedule.daysOfWeek,
+            times: schedule.times,
+            scheduledDate: scheduledDt,
+            scheduledTime: scheduledTime,
+            status: status,
+            takenAt: takenAt,
+            dose: existingDose,
+          )
+        : ScheduledDose(
+            medicineId: medicineId,
+            medicineName: medicineName,
+            eye: eye,
+            daysOfWeek: [], // Unknown if schedule not found
+            times: [scheduledTime], // Only know the specific time
+            scheduledDate: scheduledDt,
+            scheduledTime: scheduledTime,
+            status: status,
+            takenAt: takenAt,
+            dose: existingDose,
+          );
     
     // Show dialog after a short delay to ensure navigation is complete
     Future.delayed(const Duration(milliseconds: 100), () {

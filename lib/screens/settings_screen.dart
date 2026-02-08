@@ -19,6 +19,7 @@ import '../services/storage_service.dart';
 import '../services/notification_service.dart';
 import '../providers/storage_provider.dart';
 import 'notification_explorer_screen.dart';
+import 'storage_explorer_screen.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -79,6 +80,25 @@ class SettingsScreen extends ConsumerWidget {
                     context,
                     MaterialPageRoute(
                       builder: (context) => const NotificationExplorerScreen(),
+                    ),
+                  );
+                },
+              );
+            },
+          ),
+          Consumer(
+            builder: (context, ref, _) {
+              final developerMode = ref.watch(developerModeProvider);
+              if (!developerMode) return const SizedBox.shrink();
+              return ListTile(
+                leading: const Icon(Icons.storage),
+                title: const Text('Storage Explorer'),
+                subtitle: const Text('View raw storage data'),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const StorageExplorerScreen(),
                     ),
                   );
                 },

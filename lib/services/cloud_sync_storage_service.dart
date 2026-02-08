@@ -191,6 +191,11 @@ class CloudSyncStorageService implements IStorageService {
   }
 
   @override
+  Map<String, String> getAllPreferences() {
+    return _localStorage.getAllPreferences();
+  }
+
+  @override
   Future<void> wipeAllData() async {
     await _localStorage.wipeAllData();
     // Optionally wipe cloud data too
