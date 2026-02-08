@@ -33,8 +33,6 @@ class NotificationService {
   static IStorageService? _storage;
   static void Function(String medicineId, String eye, String scheduledDate, String scheduledTime)? _onOverrideTimeRequested;
   static void Function()? _onDoseAdded;
-  static void Function(String medicineId, String scheduleId, String eye, String scheduledDate, String scheduledTime)? _onNotificationTapped;
-  static NotificationResponse? _pendingNotificationResponse;
   
   // Track notification ID assignments for cancellation
   // Key: 'medicineId|scheduleId|dayOfWeek|timeIndex|offset'
@@ -45,55 +43,14 @@ class NotificationService {
 
   static void setStorage(IStorageService storage) {
     _storage = storage;
-    // If we were launched from a notification before storage existed, handle it now.
-    Future.microtask(_tryHandlePendingNotificationResponse);
   }
 
   static void setOnOverrideTimeRequested(void Function(String, String, String, String) fn) {
     _onOverrideTimeRequested = fn;
-    Future.microtask(_tryHandlePendingNotificationResponse);
   }
 
   static void setOnDoseAdded(void Function() fn) {
     _onDoseAdded = fn;
-  }
-
-  static void setOnNotificationTapped(void Function(String medicineId, String scheduleId, String eye, String scheduledDate, String scheduledTime) fn) {
-    _onNotificationTapped = fn;
-    // If we were launched from a notification before handlers existed, handle it now.
-    Future.microtask(_tryHandlePendingNotificationResponse);
-  }
-
-  /// Background handler for notification taps/actions.
-  /// Needed for action presses while app is terminated/backgrounded.
-  /// Note: keep this handler synchronous (no awaits).
-  @pragma('vm:entry-point')
-  static void _onBackgroundNotificationResponse(NotificationResponse response) {
-    try {
-      _debugLog('notification_service.dart:_onBackgroundNotificationResponse', 'Background notification response', {
-        'actionId': response.actionId,
-        'notificationId': response.id,
-        'payload': response.payload,
-        'input': response.input,
-      });
-      // Also print in case logs are visible.
-      // (On some platforms/background states, stdout may not show.)
-      // ignore: avoid_print
-      print('[NotificationService] (background) notification response: actionId=${response.actionId}, id=${response.id}, payload=${response.payload}');
-    } catch (_) {
-      // Never throw from a background entrypoint.
-    }
-  }
-
-  static Future<void> _tryHandlePendingNotificationResponse() async {
-    final pending = _pendingNotificationResponse;
-    if (pending == null) return;
-
-    // Attempt handling; if it still can't be handled, we keep it pending.
-    final handled = await _handleNotificationResponse(pending, allowQueueing: true);
-    if (handled) {
-      _pendingNotificationResponse = null;
-    }
   }
 
   static Future<void> init() async {
@@ -160,24 +117,8 @@ class NotificationService {
       );
       final initialized = await _plugin.initialize(
         InitializationSettings(android: android, iOS: ios),
-        onDidReceiveNotificationResponse: _onNotificationResponse,
-        onDidReceiveBackgroundNotificationResponse: _onBackgroundNotificationResponse,
       );
       print('[NotificationService] Plugin initialized: $initialized');
-      print('[NotificationService] Callback registered: _onNotificationResponse');
-      print('[NotificationService] Background callback registered: _onBackgroundNotificationResponse');
-
-      // Handle the case where the app is LAUNCHED from a notification tap/action.
-      // Without this, the callback may not fire for the initial launch on some platforms.
-      final launchDetails = await _plugin.getNotificationAppLaunchDetails();
-      if (launchDetails?.didNotificationLaunchApp ?? false) {
-        final launchResponse = launchDetails?.notificationResponse;
-        if (launchResponse != null) {
-          print('[NotificationService] App launched from notification. actionId=${launchResponse.actionId}, id=${launchResponse.id}');
-          // Defer handling until storage/handlers are ready (they are set after runApp()).
-          _pendingNotificationResponse = launchResponse;
-        }
-      }
       
       // Create notification channel for Android
       if (Platform.isAndroid) {
@@ -240,83 +181,6 @@ class NotificationService {
     }
   }
 
-  static Future<void> _onNotificationResponse(NotificationResponse response) async {
-    // Always keep the most recent response around until we've fully handled it.
-    _pendingNotificationResponse = response;
-    final handled = await _handleNotificationResponse(response, allowQueueing: true);
-    if (handled) {
-      // Only clear if we successfully processed it.
-      _pendingNotificationResponse = null;
-    }
-  }
-
-  static Future<bool> _handleNotificationResponse(
-    NotificationResponse response, {
-    required bool allowQueueing,
-  }) async {
-    print('[NotificationService] ========================================');
-    print('[NotificationService] 📱 NOTIFICATION RESPONSE CALLBACK CALLED!');
-    print('[NotificationService] ========================================');
-    print('[NotificationService] actionId: ${response.actionId}');
-    print('[NotificationService] notificationId: ${response.id}');
-    print('[NotificationService] payload: ${response.payload}');
-    print('[NotificationService] input: ${response.input}');
-    print('[NotificationService] ========================================');
-    
-    final payload = response.payload;
-    if (payload == null) {
-      print('[NotificationService] ⚠️ No payload in notification response');
-      return false;
-    }
-    
-    try {
-      final map = jsonDecode(payload) as Map<String, dynamic>;
-      final medicineId = map['medicineId'] as String?;
-      final scheduleId = map['scheduleId'] as String?;
-      final eyeStr = map['eye'] as String?;
-      final scheduledDate = map['scheduledDate'] as String?;
-      final scheduledTime = map['scheduledTime'] as String?;
-      
-      if (medicineId == null || scheduleId == null || eyeStr == null || scheduledDate == null || scheduledTime == null) {
-        print('[NotificationService] ⚠️ Missing required fields in payload: medicineId=$medicineId, scheduleId=$scheduleId, eye=$eyeStr, date=$scheduledDate, time=$scheduledTime');
-        return false;
-      }
-
-      final eye = Eye.values.firstWhere((e) => e.name == eyeStr, orElse: () => Eye.both);
-      final scheduledDt = DateTime.parse(scheduledDate);
-
-      // Handle notification tap (only action we support now)
-      print('[NotificationService] 📱 Notification tapped: medicineId=$medicineId, scheduleId=$scheduleId, eye=$eyeStr, date=$scheduledDate, time=$scheduledTime');
-      _debugLog('notification_service.dart:_onNotificationResponse', 'Notification tapped', {
-        'medicineId': medicineId,
-        'scheduleId': scheduleId,
-        'eye': eyeStr,
-        'scheduledDate': scheduledDate,
-        'scheduledTime': scheduledTime,
-        'actionId': response.actionId ?? 'tap',
-        'notificationId': response.id,
-      });
-      
-      if (_onNotificationTapped == null) {
-        print('[NotificationService] ⚠️ Tap handler not set yet; will handle after app finishes booting.');
-        return allowQueueing;
-      }
-      
-      _onNotificationTapped?.call(medicineId, scheduleId, eyeStr, scheduledDate, scheduledTime);
-      return true;
-    } catch (e, stackTrace) {
-      print('[NotificationService] ✗ ERROR handling notification response: $e');
-      print('[NotificationService] Stack trace: $stackTrace');
-      print('[NotificationService] Response details: actionId=${response.actionId}, id=${response.id}, payload=${response.payload}');
-      _debugLog('notification_service.dart:_onNotificationResponse', 'Error handling notification response', {
-        'error': e.toString(),
-        'actionId': response.actionId,
-        'notificationId': response.id,
-        'payload': response.payload,
-      });
-      return false;
-    }
-  }
 
   static Future<void> _addDose(String medicineId, Eye eye, DateTime scheduledDate, String scheduledTime, DoseStatus status, DateTime? takenAt) async {
     final storage = _storage;
