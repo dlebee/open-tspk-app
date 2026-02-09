@@ -5,18 +5,21 @@ This project is configured to build on Xcode Cloud. The following files are requ
 ## Required Files
 
 1. **`ios/.xcode.env`** - Tells Xcode where to find Flutter SDK
-2. **`ios/ci_scripts/ci_pre_xcodebuild.sh`** - Pre-build script that sets up Flutter and CocoaPods
+2. **`ios/ci_scripts/ci_post_clone.sh`** - Post-clone script that sets up Flutter and CocoaPods (runs after repository is cloned)
 
 ## How It Works
 
-1. Xcode Cloud detects the `ci_scripts` directory
-2. Before building, it runs `ci_pre_xcodebuild.sh`
+1. Xcode Cloud clones your repository
+2. After cloning, it runs `ci_post_clone.sh` from the `ci_scripts` directory
 3. The script:
-   - Finds/installs Flutter SDK
+   - Installs Flutter SDK if not available
+   - Runs `flutter precache --ios` to download iOS tools
    - Runs `flutter pub get` to get dependencies
-   - Generates `ios/Flutter/Generated.xcconfig` (required for build)
+   - Installs CocoaPods via Homebrew
    - Runs `pod install` to install CocoaPods dependencies
 4. Xcode then builds the app using the generated files
+
+**Note:** The script uses `$CI_PRIMARY_REPOSITORY_PATH` which is automatically set by Xcode Cloud to point to your repository root.
 
 ## Important Notes
 
@@ -38,7 +41,7 @@ Xcode Cloud doesn't include Flutter by default. You have two options:
 If you see errors about missing `Generated.xcconfig`:
 - Ensure `flutter pub get` runs successfully
 - Check that Flutter SDK is accessible
-- Verify the script has execute permissions: `chmod +x ios/ci_scripts/ci_pre_xcodebuild.sh`
+- Verify the script has execute permissions: `chmod +x ios/ci_scripts/ci_post_clone.sh`
 
 If CocoaPods errors occur:
 - Xcode Cloud should have CocoaPods pre-installed
@@ -50,7 +53,7 @@ You can test the script locally:
 
 ```bash
 cd ios
-CI_WORKSPACE=.. ./ci_scripts/ci_pre_xcodebuild.sh
+CI_PRIMARY_REPOSITORY_PATH=.. ./ci_scripts/ci_post_clone.sh
 ```
 
 Then build in Xcode to verify everything works.
