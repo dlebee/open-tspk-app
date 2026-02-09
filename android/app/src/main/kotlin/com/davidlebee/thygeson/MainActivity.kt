@@ -1,4 +1,4 @@
-package com.example.thygeson
+package com.davidlebee.thygeson
 
 import io.flutter.embedding.android.FlutterActivity
 
