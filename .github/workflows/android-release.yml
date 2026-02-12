@@ -17,6 +17,9 @@ on:
 jobs:
   build-and-upload:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write  
+      contents: read 
     
     steps:
       - name: Checkout main repository
