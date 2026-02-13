@@ -144,7 +144,8 @@ jobs:
       - name: Upload to Play Store
         uses: r0adkll/upload-google-play@v1
         with:
-          serviceAccountJsonPlainText: ${{ steps.auth.outputs.credentials_json }}
+          serviceAccountJson: ${{ steps.auth.outputs.credentials_file_path }}
+          #serviceAccountJsonPlainText: ${{ steps.auth.outputs.credentials_json }}
           packageName: com.davidlebee.thygeson
           releaseFiles: build/app/outputs/bundle/release/app-release.aab
           track: ${{ github.event.inputs.track }}
