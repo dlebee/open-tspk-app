@@ -8,10 +8,13 @@ plugins {
 import java.util.Properties
 import java.io.FileInputStream
 
-// Load keystore properties from ../open-tspk-app-ks/key.properties
-// Or from CI/CD environment variables (for GitHub Actions)
+// Keystore dir: ../open-tspk-app-ks from project root (same as CI where workflow uses ../open-tspk-app-ks)
+// rootProject.projectDir = android/ -> parentFile = project root -> parentFile = repo parent -> resolve("open-tspk-app-ks")
+val keystoreDir = rootProject.projectDir.parentFile.parentFile.resolve("open-tspk-app-ks")
+
+// Load keystore properties from keystore dir, or from CI/CD environment variables (for GitHub Actions)
 val keystoreProperties = Properties()
-val keystorePropertiesFile = file("../../../open-tspk-app-ks/key.properties")
+val keystorePropertiesFile = keystoreDir.resolve("key.properties")
 if (keystorePropertiesFile.exists()) {
     keystoreProperties.load(FileInputStream(keystorePropertiesFile))
 } else {
@@ -19,7 +22,7 @@ if (keystorePropertiesFile.exists()) {
     keystoreProperties["storePassword"] = System.getenv("ANDROID_STORE_PASSWORD") ?: ""
     keystoreProperties["keyPassword"] = System.getenv("ANDROID_KEY_PASSWORD") ?: System.getenv("ANDROID_STORE_PASSWORD") ?: ""
     keystoreProperties["keyAlias"] = System.getenv("ANDROID_KEY_ALIAS") ?: "upload"
-    keystoreProperties["storeFile"] = System.getenv("ANDROID_STORE_FILE") ?: "upload-keystore.jks"
+    keystoreProperties["storeFile"] = System.getenv("ANDROID_STORE_FILE") ?: "thygeson-app.keystore"
 }
 
 android {
@@ -47,9 +50,9 @@ android {
 
     signingConfigs {
         create("release") {
-            // Determine keystore file path
+            // Determine keystore file path (same keystoreDir as key.properties)
             val storeFileName = keystoreProperties["storeFile"] as String? ?: "thygeson-app.keystore"
-            val keystoreFile = file("../../../open-tspk-app-ks/$storeFileName")
+            val keystoreFile = keystoreDir.resolve(storeFileName)
             
             // Configure signing if keystore exists and password is provided
             if (keystoreFile.exists() && keystoreProperties["storePassword"] as String? != null && keystoreProperties["storePassword"] as String != "") {
