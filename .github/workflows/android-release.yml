@@ -109,6 +109,28 @@ jobs:
         run: |
           flutter build appbundle --release
       
+      - name: Show unzipped AAB contents (signature files)
+        run: |
+          AAB="${{ github.workspace }}/build/app/outputs/bundle/release/app-release.aab"
+          echo "### AAB bundle contents (app-release.aab)"
+          echo ""
+          unzip -l "$AAB" | head -80
+          echo ""
+          echo "### META-INF (signature files – release should have .RSA / .SF, not Android Debug)"
+          unzip -l "$AAB" | grep -E 'META-INF|\.RSA|\.SF|MANIFEST'
+          echo ""
+          echo "### META-INF file listing only"
+          unzip -l "$AAB" | grep META-INF
+          TMP=$(mktemp -d)
+          unzip -q -o "$AAB" -d "$TMP" 'META-INF/*'
+          echo ""
+          echo "### META-INF directory contents (names only)"
+          ls -la "$TMP/META-INF/"
+          echo ""
+          echo "### MANIFEST.MF (first 40 lines)"
+          head -40 "$TMP/META-INF/MANIFEST.MF" 2>/dev/null || true
+          rm -rf "$TMP"
+      
       - name: Authenticate to Google Cloud
         id: auth
         uses: google-github-actions/auth@v2
