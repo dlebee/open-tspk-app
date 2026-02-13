@@ -910,9 +910,16 @@ class NotificationService {
       }
 
       // Cancel all old notifications
-      await _plugin.cancelAll();
-      _clearNotificationIdMappings();
-      print('[NotificationService] Cancelled all old notifications');
+      try {
+        await _plugin.cancelAll();
+        _clearNotificationIdMappings();
+        print('[NotificationService] Cancelled all old notifications');
+      } catch (e) {
+        // Handle ProGuard/R8 issues in release builds gracefully
+        print('[NotificationService] ⚠️ Error cancelling notifications (non-fatal): $e');
+        // Clear mappings anyway to prevent stale state
+        _clearNotificationIdMappings();
+      }
       
       if (medicinesToSchedule.isEmpty) {
         print('[NotificationService] No medicines found, nothing to schedule');

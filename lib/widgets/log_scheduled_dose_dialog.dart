@@ -97,50 +97,81 @@ class LogScheduledDoseDialog extends ConsumerWidget {
     DoseStatus status,
     DateTime? takenAt,
   ) async {
-    if (dose.dose != null) {
-      await ref.read(dosesProvider.notifier).delete(dose.dose!.id);
+    try {
+      if (dose.dose != null) {
+        await ref.read(dosesProvider.notifier).delete(dose.dose!.id);
+      }
+      
+      final parts = dose.scheduledTime.split(':');
+      final scheduledDateTime = DateTime(
+        dose.scheduledDate.year,
+        dose.scheduledDate.month,
+        dose.scheduledDate.day,
+        int.parse(parts[0]),
+        parts.length > 1 ? int.parse(parts[1]) : 0,
+      );
+      
+      // For skipped doses, use scheduled date/time as recordedAt
+      // For taken doses, use DateTime.now() as recordedAt
+      final recordedAt = status == DoseStatus.skipped ? scheduledDateTime : DateTime.now();
+      
+      final newDose = MedicineDose(
+        medicineId: dose.medicineId,
+        medicineName: dose.medicineName,
+        eye: dose.eye,
+        status: status,
+        recordedAt: recordedAt,
+        scheduledDate: dose.scheduledDate,
+        scheduledTime: dose.scheduledTime,
+        takenAt: takenAt,
+      );
+      
+      // Cancel remaining notifications for this schedule
+      try {
+        await NotificationService.cancelForSchedule(
+          dose.medicineId,
+          dose.scheduledDate,
+          dose.scheduledTime,
+          dose.eye,
+        );
+      } catch (e) {
+        // Non-fatal: notification cancellation can fail in release builds due to ProGuard
+        print('[LogScheduledDoseDialog] Warning: Failed to cancel notifications: $e');
+      }
+      
+      await ref.read(dosesProvider.notifier).add(newDose);
+      if (context.mounted) Navigator.pop(context);
+    } catch (e) {
+      // Show error to user instead of crashing
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to save dose: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      print('[LogScheduledDoseDialog] Error logging dose: $e');
     }
-    
-    final parts = dose.scheduledTime.split(':');
-    final scheduledDateTime = DateTime(
-      dose.scheduledDate.year,
-      dose.scheduledDate.month,
-      dose.scheduledDate.day,
-      int.parse(parts[0]),
-      parts.length > 1 ? int.parse(parts[1]) : 0,
-    );
-    
-    // For skipped doses, use scheduled date/time as recordedAt
-    // For taken doses, use DateTime.now() as recordedAt
-    final recordedAt = status == DoseStatus.skipped ? scheduledDateTime : DateTime.now();
-    
-    final newDose = MedicineDose(
-      medicineId: dose.medicineId,
-      medicineName: dose.medicineName,
-      eye: dose.eye,
-      status: status,
-      recordedAt: recordedAt,
-      scheduledDate: dose.scheduledDate,
-      scheduledTime: dose.scheduledTime,
-      takenAt: takenAt,
-    );
-    
-    // Cancel remaining notifications for this schedule
-    await NotificationService.cancelForSchedule(
-      dose.medicineId,
-      dose.scheduledDate,
-      dose.scheduledTime,
-      dose.eye,
-    );
-    
-    await ref.read(dosesProvider.notifier).add(newDose);
-    if (context.mounted) Navigator.pop(context);
   }
 
   Future<void> _untakeAndClose(BuildContext context, WidgetRef ref) async {
-    if (dose.dose != null) {
-      await ref.read(dosesProvider.notifier).delete(dose.dose!.id);
+    try {
+      if (dose.dose != null) {
+        await ref.read(dosesProvider.notifier).delete(dose.dose!.id);
+      }
+      if (context.mounted) Navigator.pop(context);
+    } catch (e) {
+      // Show error to user instead of crashing
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to remove dose: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      print('[LogScheduledDoseDialog] Error untaking dose: $e');
     }
-    if (context.mounted) Navigator.pop(context);
   }
 }

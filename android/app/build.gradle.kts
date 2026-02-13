@@ -11,7 +11,7 @@ import java.io.FileInputStream
 // Load keystore properties from ../open-tspk-app-ks/key.properties
 // Or from CI/CD environment variables (for GitHub Actions)
 val keystoreProperties = Properties()
-val keystorePropertiesFile = file("../open-tspk-app-ks/key.properties")
+val keystorePropertiesFile = file("../../../open-tspk-app-ks/key.properties")
 if (keystorePropertiesFile.exists()) {
     keystoreProperties.load(FileInputStream(keystorePropertiesFile))
 } else {
@@ -49,7 +49,7 @@ android {
         create("release") {
             // Determine keystore file path
             val storeFileName = keystoreProperties["storeFile"] as String? ?: "thygeson-app.keystore"
-            val keystoreFile = file("../open-tspk-app-ks/$storeFileName")
+            val keystoreFile = file("../../../open-tspk-app-ks/$storeFileName")
             
             // Configure signing if keystore exists and password is provided
             if (keystoreFile.exists() && keystoreProperties["storePassword"] as String? != null && keystoreProperties["storePassword"] as String != "") {
@@ -65,6 +65,11 @@ android {
 
     buildTypes {
         release {
+            // Disable minification to prevent ProGuard/R8 issues with flutter_local_notifications
+            // The plugin uses reflection which requires generic type information that gets stripped
+            isMinifyEnabled = false
+            isShrinkResources = false
+            
             // Use release signing if configured, otherwise debug (for contributors)
             if (signingConfigs.getByName("release").storeFile != null && 
                 signingConfigs.getByName("release").storeFile?.exists() == true) {

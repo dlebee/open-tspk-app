@@ -92,6 +92,7 @@ class _ThygesonAppState extends ConsumerState<ThygesonApp> {
       title: 'Thygeson',
       theme: _buildTheme(highContrast),
       home: const MainNavigator(),
+      debugShowCheckedModeBanner: false,
     );
   }
 

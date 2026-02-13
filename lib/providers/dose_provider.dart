@@ -26,17 +26,29 @@ class DosesNotifier extends StateNotifier<AsyncValue<List<MedicineDose>>> {
   }
 
   Future<void> add(MedicineDose dose) async {
-    final list = state.valueOrNull ?? [];
-    final updated = [...list, dose];
-    await _storage.saveDoses(updated);
-    state = AsyncValue.data(updated);
+    try {
+      final list = state.valueOrNull ?? [];
+      final updated = [...list, dose];
+      await _storage.saveDoses(updated);
+      state = AsyncValue.data(updated);
+    } catch (e, st) {
+      print('[DosesNotifier] Error adding dose: $e');
+      state = AsyncValue.error(e, st);
+      rethrow;
+    }
   }
 
   Future<void> delete(String id) async {
-    final list = state.valueOrNull ?? [];
-    final updated = list.where((d) => d.id != id).toList();
-    await _storage.saveDoses(updated);
-    state = AsyncValue.data(updated);
+    try {
+      final list = state.valueOrNull ?? [];
+      final updated = list.where((d) => d.id != id).toList();
+      await _storage.saveDoses(updated);
+      state = AsyncValue.data(updated);
+    } catch (e, st) {
+      print('[DosesNotifier] Error deleting dose: $e');
+      state = AsyncValue.error(e, st);
+      rethrow;
+    }
   }
 
   Future<void> refresh() => _load();
