@@ -117,11 +117,19 @@ class SettingsScreen extends ConsumerWidget {
               );
             },
           ),
+          Builder(
+            builder: (tileContext) => ListTile(
+              leading: const Icon(Icons.upload_file),
+              title: const Text('Export data'),
+              subtitle: const Text('Export all data as JSON'),
+              onTap: () => _exportData(context, ref, shareOriginContext: tileContext),
+            ),
+          ),
           ListTile(
-            leading: const Icon(Icons.upload_file),
-            title: const Text('Export data'),
-            subtitle: const Text('Export all data as JSON'),
-            onTap: () => _exportData(context, ref),
+            leading: const Icon(Icons.download),
+            title: const Text('Import data'),
+            subtitle: const Text('Restore from a previously exported JSON file'),
+            onTap: () => _importData(context, ref),
           ),
           const Divider(),
           ListTile(
@@ -167,7 +175,11 @@ class SettingsScreen extends ConsumerWidget {
     );
   }
 
-  Future<void> _exportData(BuildContext context, WidgetRef ref) async {
+  Future<void> _exportData(
+    BuildContext context,
+    WidgetRef ref, {
+    BuildContext? shareOriginContext,
+  }) async {
     final medicines = ref.read(medicinesProvider).valueOrNull ?? [];
     final doses = ref.read(dosesProvider).valueOrNull ?? [];
     final flareUps = ref.read(flareUpsProvider).valueOrNull ?? [];
@@ -180,11 +192,100 @@ class SettingsScreen extends ConsumerWidget {
       appointments: appointments,
     );
 
-    await ExportService.share(exported);
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Data exported')),
+    Rect? shareOrigin;
+    if (shareOriginContext != null) {
+      final box =
+          shareOriginContext.findRenderObject() as RenderBox?;
+      if (box != null && box.hasSize) {
+        final pos = box.localToGlobal(Offset.zero);
+        shareOrigin = Rect.fromLTWH(
+          pos.dx,
+          pos.dy,
+          box.size.width,
+          box.size.height,
+        );
+      }
+    }
+
+    try {
+      await ExportService.share(
+        exported,
+        sharePositionOrigin: shareOrigin,
       );
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Data exported')),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Export failed: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _importData(BuildContext context, WidgetRef ref) async {
+    try {
+      final importData = await ExportService.pickAndParseImport();
+      if (importData == null) return; // User cancelled
+
+      if (!context.mounted) return;
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Import data'),
+          content: Text(
+            'This will replace all current data with the imported file.\n\n'
+            'Import: ${importData.medicines.length} medicines, '
+            '${importData.doses.length} doses, '
+            '${importData.flareUps.length} flare-ups, '
+            '${importData.appointments.length} appointments.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('Import'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true || !context.mounted) return;
+
+      await NotificationService.cancelAll();
+      final storage = ref.read(storageServiceProvider);
+      await storage.saveMedicines(importData.medicines);
+      await storage.saveDoses(importData.doses);
+      await storage.saveFlareUps(importData.flareUps);
+      await storage.saveAppointments(importData.appointments);
+
+      ref.invalidate(medicinesProvider);
+      ref.invalidate(dosesProvider);
+      ref.invalidate(flareUpsProvider);
+      ref.invalidate(appointmentsProvider);
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Data imported successfully')),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Import failed: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
