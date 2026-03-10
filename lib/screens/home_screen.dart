@@ -8,6 +8,7 @@ import '../models/scheduled_dose.dart';
 import '../providers/appointment_provider.dart';
 import '../providers/calendar_provider.dart';
 import '../providers/medicine_provider.dart';
+import '../utils/date_utils.dart';
 import '../providers/appointment_provider.dart';
 import '../screens/appointments_screen.dart' show AppointmentForm;
 import '../widgets/log_dose_dialog.dart';
@@ -22,7 +23,7 @@ class HomeScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-    final yesterday = today.subtract(const Duration(days: 1));
+    final yesterday = addCalendarDays(today, -1);
 
     final todayScheduled = ref.watch(scheduledDosesForDateProvider(today));
     final todayUnscheduled = ref.watch(unscheduledDosesForDateProvider(today));
@@ -184,7 +185,7 @@ class HomeScreen extends ConsumerWidget {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final appointmentDate = DateTime(date.year, date.month, date.day);
-    final daysDiff = appointmentDate.difference(today).inDays;
+    final daysDiff = calendarDaysBetween(today, appointmentDate);
     
     final dateStr = '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
     final timeStr = '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';

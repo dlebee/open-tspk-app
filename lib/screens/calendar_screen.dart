@@ -8,6 +8,7 @@ import '../models/medicine_dose.dart';
 import '../models/scheduled_dose.dart';
 import '../providers/appointment_provider.dart';
 import '../providers/calendar_provider.dart';
+import '../utils/date_utils.dart';
 import '../providers/medicine_provider.dart';
 import '../screens/appointments_screen.dart' show AppointmentForm;
 import '../widgets/flare_up_emojis.dart';
@@ -108,8 +109,9 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
   }
 
   String _weekRangeText() {
-    final start = _focusedDate.subtract(Duration(days: _focusedDate.weekday % 7));
-    final end = start.add(const Duration(days: 6));
+    final base = DateTime(_focusedDate.year, _focusedDate.month, _focusedDate.day);
+    final start = addCalendarDays(base, -(base.weekday % 7));
+    final end = addCalendarDays(start, 6);
     return '${DateFormat('MMM d').format(start)} – ${DateFormat('MMM d, yyyy').format(end)}';
   }
 
@@ -120,10 +122,10 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
           _focusedDate = DateTime(_focusedDate.year, _focusedDate.month + delta, 1);
           break;
         case CalendarView.week:
-          _focusedDate = _focusedDate.add(Duration(days: 7 * delta));
+          _focusedDate = addCalendarDays(_focusedDate, 7 * delta);
           break;
         case CalendarView.today:
-          _focusedDate = _focusedDate.add(Duration(days: delta));
+          _focusedDate = addCalendarDays(_focusedDate, delta);
           break;
       }
     });
@@ -204,8 +206,8 @@ class _MonthGrid extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final firstOfMonth = DateTime(focusedDate.year, focusedDate.month, 1);
-    final gridStart = firstOfMonth.subtract(Duration(days: firstOfMonth.weekday % 7));
-    final gridEnd = gridStart.add(const Duration(days: 41));
+    final gridStart = addCalendarDays(firstOfMonth, -(firstOfMonth.weekday % 7));
+    final gridEnd = addCalendarDays(gridStart, 41);
     final range = (start: gridStart, end: gridEnd);
     final dosesByDate = ref.watch(scheduledDosesForRangeProvider(range));
     final unscheduledByDate = ref.watch(unscheduledDosesForRangeProvider(range));
@@ -237,8 +239,8 @@ class _MonthGrid extends ConsumerWidget {
               ),
               itemCount: 42,
               itemBuilder: (context, i) {
-                final date = range.start.add(Duration(days: i));
-                final dateKey = DateTime(date.year, date.month, date.day);
+                final dateKey = addCalendarDays(range.start, i);
+                final date = dateKey;
                 final doses = dosesByDate[dateKey] ?? [];
                 final isCurrentMonth = date.month == focusedDate.month;
                 final isToday = date.year == today.year &&
@@ -341,14 +343,11 @@ class _WeekView extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final weekStart = DateTime(
-      focusedDate.year,
-      focusedDate.month,
-      focusedDate.day,
-    ).subtract(Duration(days: focusedDate.weekday % 7));
+    final base = DateTime(focusedDate.year, focusedDate.month, focusedDate.day);
+    final weekStart = addCalendarDays(base, -(base.weekday % 7));
     final range = (
       start: weekStart,
-      end: weekStart.add(const Duration(days: 6)),
+      end: addCalendarDays(weekStart, 6),
     );
     final dosesByDate = ref.watch(scheduledDosesForRangeProvider(range));
     final unscheduledByDate = ref.watch(unscheduledDosesForRangeProvider(range));
@@ -358,7 +357,7 @@ class _WeekView extends ConsumerWidget {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: List.generate(7, (i) {
-        final date = range.start.add(Duration(days: i));
+        final date = addCalendarDays(range.start, i);
         final doses = dosesByDate[date] ?? [];
         final unscheduled = unscheduledByDate[date] ?? [];
         final flareUps = flareUpsByDate[date] ?? [];

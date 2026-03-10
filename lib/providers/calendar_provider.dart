@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/appointment_note.dart';
+import '../utils/date_utils.dart';
 import '../models/flare_up.dart';
 import '../models/medicine.dart';
 import '../models/medicine_dose.dart';
@@ -68,7 +69,7 @@ final scheduledDosesForRangeProvider = Provider.family<Map<DateTime, List<Schedu
   final end = DateTime(range.end.year, range.end.month, range.end.day);
   while (!d.isAfter(end)) {
     result[d] = _generateScheduledDosesForDate(medicines, doses, d);
-    d = d.add(const Duration(days: 1));
+    d = addCalendarDays(d, 1);
   }
   return result;
 });
