@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 import '../models/appointment_note.dart';
 import '../models/flare_up.dart';
 import '../models/medicine.dart';
@@ -79,7 +81,7 @@ class CloudSyncStorageService implements IStorageService {
       }
     } catch (e) {
       // Silently fail - app continues to work with local data
-      print('Background sync failed: $e');
+      debugPrint('Background sync failed: $e');
     }
   }
 
@@ -92,6 +94,7 @@ class CloudSyncStorageService implements IStorageService {
   }
 
   /// Sync to cloud in background
+  // ignore: unused_element
   Future<void> _syncToCloud() async {
     try {
       await _cloudAdapter.syncMedicines(_localStorage.getMedicines());
@@ -100,7 +103,7 @@ class CloudSyncStorageService implements IStorageService {
       await _cloudAdapter.syncAppointments(_localStorage.getAppointments());
     } catch (e) {
       // Silently fail - local data is already saved
-      print('Cloud sync failed: $e');
+      debugPrint('Cloud sync failed: $e');
     }
   }
 

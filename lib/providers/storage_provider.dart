@@ -15,6 +15,9 @@ class StorageServiceNotifier extends StateNotifier<IStorageService> {
     _initialize();
   }
 
+  /// Used by tests to inject an already-initialized storage (e.g. LocalStorageService).
+  StorageServiceNotifier.withStorage(super.initial);
+
   Future<void> _initialize() async {
     final localStorage = LocalStorageService();
     await localStorage.init();

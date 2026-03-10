@@ -32,7 +32,7 @@ void showLogFlareUpSheet(BuildContext context, WidgetRef ref, {FlareUp? existing
       },
       onDelete: existing != null
           ? () async {
-              await ref.read(flareUpsProvider.notifier).delete(existing!.id);
+              await ref.read(flareUpsProvider.notifier).delete(existing.id);
               if (ctx.mounted) Navigator.pop(ctx);
             }
           : null,
@@ -127,7 +127,7 @@ class _LogFlareUpFormState extends State<LogFlareUpForm> {
               flip: false,
             ),
             DropdownButtonFormField<String>(
-              value: _reason,
+              initialValue: _reason,
               decoration: const InputDecoration(labelText: 'Reason'),
               items: widget.reasons
                   .map((r) => DropdownMenuItem(value: r, child: Text(r)))
@@ -292,7 +292,7 @@ class _PainEyeChip extends StatelessWidget {
           border: Border.all(
             color: isSelected
                 ? Theme.of(context).colorScheme.primary
-                : Theme.of(context).colorScheme.outline.withOpacity(0.3),
+                : Theme.of(context).colorScheme.outline.withValues(alpha: 0.3),
             width: isSelected ? 2 : 1,
           ),
           borderRadius: BorderRadius.circular(8),
@@ -304,7 +304,7 @@ class _PainEyeChip extends StatelessWidget {
               opacity: opacity,
               child: Transform(
                 alignment: Alignment.center,
-                transform: Matrix4.identity()..scale(flip ? -1.0 : 1.0, 1.0),
+                transform: Matrix4.diagonal3Values(flip ? -1.0 : 1.0, 1.0, 1.0),
                 child: SvgPicture.asset(
                   'assets/icons/eye.svg',
                   width: 28,

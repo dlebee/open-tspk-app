@@ -66,7 +66,7 @@ class _ThygesonAppState extends ConsumerState<ThygesonApp> {
         // Wait a bit longer for navigation and providers to be ready
         Future.delayed(const Duration(milliseconds: 500), () {
           final ctx = navigatorKey.currentContext;
-          if (ctx != null) {
+          if (ctx != null && ctx.mounted) {
             // Ensure providers are loaded before showing dialog
             final medicines = ref.read(medicinesProvider).valueOrNull;
             final doses = ref.read(dosesProvider).valueOrNull;
@@ -77,7 +77,7 @@ class _ThygesonAppState extends ConsumerState<ThygesonApp> {
               // Providers not ready yet, wait a bit more
               Future.delayed(const Duration(milliseconds: 500), () {
                 final ctx2 = navigatorKey.currentContext;
-                if (ctx2 != null) {
+                if (ctx2 != null && ctx2.mounted) {
                   _handleNotificationTap(ctx2, ref, medicineId, scheduleId, eyeStr, scheduledDate, scheduledTime);
                 }
               });
@@ -140,7 +140,7 @@ class _ThygesonAppState extends ConsumerState<ThygesonApp> {
     try {
       schedule = medicine.schedules.firstWhere((s) => s.id == scheduleId);
     } catch (_) {
-      print('[App] Warning: Schedule with ID $scheduleId not found for medicine ${medicine.id}');
+      debugPrint('[App] Warning: Schedule with ID $scheduleId not found for medicine ${medicine.id}');
     }
     
     final medicineName = medicine.name;
@@ -226,7 +226,7 @@ class _ThygesonAppState extends ConsumerState<ThygesonApp> {
     // Show dialog after a short delay to ensure navigation is complete
     Future.delayed(const Duration(milliseconds: 100), () {
       final ctx = navigatorKey.currentContext;
-      if (ctx != null) {
+      if (ctx != null && ctx.mounted) {
         showDialog(
           context: ctx,
           builder: (dialogCtx) => LogScheduledDoseDialog(dose: scheduledDose),

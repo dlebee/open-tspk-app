@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/medicine_dose.dart';
@@ -32,7 +33,7 @@ class DosesNotifier extends StateNotifier<AsyncValue<List<MedicineDose>>> {
       await _storage.saveDoses(updated);
       state = AsyncValue.data(updated);
     } catch (e, st) {
-      print('[DosesNotifier] Error adding dose: $e');
+      debugPrint('[DosesNotifier] Error adding dose: $e');
       state = AsyncValue.error(e, st);
       rethrow;
     }
@@ -45,7 +46,7 @@ class DosesNotifier extends StateNotifier<AsyncValue<List<MedicineDose>>> {
       await _storage.saveDoses(updated);
       state = AsyncValue.data(updated);
     } catch (e, st) {
-      print('[DosesNotifier] Error deleting dose: $e');
+      debugPrint('[DosesNotifier] Error deleting dose: $e');
       state = AsyncValue.error(e, st);
       rethrow;
     }

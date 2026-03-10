@@ -589,7 +589,7 @@ class _CloudSyncSectionState extends ConsumerState<_CloudSyncSection> {
 
         // Switch back to local storage
         final localStorage = storage is CloudSyncStorageService
-            ? (storage as CloudSyncStorageService).localStorage
+            ? storage.localStorage
             : storage as LocalStorageService;
 
         ref.read(storageServiceProvider.notifier).updateStorage(localStorage);

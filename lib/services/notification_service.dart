@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:timezone/data/latest_all.dart' as tz_data;
@@ -31,6 +32,8 @@ class NotificationService {
   // #endregion
   static final _plugin = FlutterLocalNotificationsPlugin();
   static IStorageService? _storage;
+  // Set by setOnOverrideTimeRequested; invoked when user taps "adjust time" from notification (if wired).
+  // ignore: unused_field
   static void Function(String medicineId, String eye, String scheduledDate, String scheduledTime)? _onOverrideTimeRequested;
   static void Function()? _onDoseAdded;
   static void Function(String medicineId, String scheduleId, String eye, String scheduledDate, String scheduledTime)? _onNotificationTapped;
@@ -67,54 +70,62 @@ class NotificationService {
   }
 
   static Future<void> init() async {
-    print('[NotificationService] Initializing notification service...');
+    debugPrint('[NotificationService] Initializing notification service...');
     try {
       tz_data.initializeTimeZones();
-      print('[NotificationService] Timezone data initialized');
+      debugPrint('[NotificationService] Timezone data initialized');
       
       // Get the device's actual timezone using flutter_timezone
       final systemNow = DateTime.now();
-      print('[NotificationService] System timezone offset: ${systemNow.timeZoneOffset}');
+      debugPrint('[NotificationService] System timezone offset: ${systemNow.timeZoneOffset}');
       
       try {
         final timezoneInfo = await FlutterTimezone.getLocalTimezone();
         final timezoneName = timezoneInfo.identifier;
-        print('[NotificationService] Device timezone (from flutter_timezone): $timezoneName');
+        debugPrint('[NotificationService] Device timezone (from flutter_timezone): $timezoneName');
         
         final location = tz.getLocation(timezoneName);
         tz.setLocalLocation(location);
-        print('[NotificationService] Set local timezone to: ${tz.local.name}');
+        debugPrint('[NotificationService] Set local timezone to: ${tz.local.name}');
       } catch (e) {
-        print('[NotificationService] WARNING: Could not get device timezone: $e');
+        debugPrint('[NotificationService] WARNING: Could not get device timezone: $e');
         // Fallback: try to match by offset (less reliable but better than UTC)
         final offsetHours = systemNow.timeZoneOffset.inHours;
         final offsetMinutes = systemNow.timeZoneOffset.inMinutes % 60;
-        print('[NotificationService] Falling back to offset-based detection: ${offsetHours}h ${offsetMinutes}m');
+        debugPrint('[NotificationService] Falling back to offset-based detection: ${offsetHours}h ${offsetMinutes}m');
         
         String? fallbackTimezone;
-        if (offsetHours == -5 && offsetMinutes == 0) fallbackTimezone = 'America/New_York';
-        else if (offsetHours == -6 && offsetMinutes == 0) fallbackTimezone = 'America/Chicago';
-        else if (offsetHours == -7 && offsetMinutes == 0) fallbackTimezone = 'America/Denver';
-        else if (offsetHours == -8 && offsetMinutes == 0) fallbackTimezone = 'America/Los_Angeles';
-        else if (offsetHours == 0 && offsetMinutes == 0) fallbackTimezone = 'Europe/London';
-        else if (offsetHours == 1 && offsetMinutes == 0) fallbackTimezone = 'Europe/Paris';
-        else if (offsetHours == 9 && offsetMinutes == 0) fallbackTimezone = 'Asia/Tokyo';
+        if (offsetHours == -5 && offsetMinutes == 0) {
+          fallbackTimezone = 'America/New_York';
+        } else if (offsetHours == -6 && offsetMinutes == 0) {
+          fallbackTimezone = 'America/Chicago';
+        } else if (offsetHours == -7 && offsetMinutes == 0) {
+          fallbackTimezone = 'America/Denver';
+        } else if (offsetHours == -8 && offsetMinutes == 0) {
+          fallbackTimezone = 'America/Los_Angeles';
+        } else if (offsetHours == 0 && offsetMinutes == 0) {
+          fallbackTimezone = 'Europe/London';
+        } else if (offsetHours == 1 && offsetMinutes == 0) {
+          fallbackTimezone = 'Europe/Paris';
+        } else if (offsetHours == 9 && offsetMinutes == 0) {
+          fallbackTimezone = 'Asia/Tokyo';
+        }
         
         if (fallbackTimezone != null) {
           try {
             tz.setLocalLocation(tz.getLocation(fallbackTimezone));
-            print('[NotificationService] Set fallback timezone to: ${tz.local.name}');
+            debugPrint('[NotificationService] Set fallback timezone to: ${tz.local.name}');
           } catch (e2) {
-            print('[NotificationService] WARNING: Fallback timezone also failed: $e2. Using UTC.');
+            debugPrint('[NotificationService] WARNING: Fallback timezone also failed: $e2. Using UTC.');
           }
         } else {
-          print('[NotificationService] WARNING: Unknown timezone offset, using UTC. Notifications may fire at wrong times.');
+          debugPrint('[NotificationService] WARNING: Unknown timezone offset, using UTC. Notifications may fire at wrong times.');
         }
       }
       
-      print('[NotificationService] System local time: $systemNow');
-      print('[NotificationService] System timezone offset: ${systemNow.timeZoneOffset}');
-      print('[NotificationService] System date: ${systemNow.year}-${systemNow.month.toString().padLeft(2, '0')}-${systemNow.day.toString().padLeft(2, '0')}');
+      debugPrint('[NotificationService] System local time: $systemNow');
+      debugPrint('[NotificationService] System timezone offset: ${systemNow.timeZoneOffset}');
+      debugPrint('[NotificationService] System date: ${systemNow.year}-${systemNow.month.toString().padLeft(2, '0')}-${systemNow.day.toString().padLeft(2, '0')}');
       
       const android = AndroidInitializationSettings('@mipmap/ic_launcher');
       // Configure iOS to show notifications even when app is in foreground
@@ -132,8 +143,8 @@ class NotificationService {
         InitializationSettings(android: android, iOS: ios),
         onDidReceiveNotificationResponse: _onNotificationTap,
       );
-      print('[NotificationService] Plugin initialized: $initialized');
-      print('[NotificationService] Notification tap handler registered');
+      debugPrint('[NotificationService] Plugin initialized: $initialized');
+      debugPrint('[NotificationService] Notification tap handler registered');
       
       // #region agent log
       _debugLog('notification_service.dart:init', 'Plugin initialized with tap handler', {
@@ -144,7 +155,7 @@ class NotificationService {
       
       // Create notification channel for Android
       if (Platform.isAndroid) {
-        print('[NotificationService] Setting up Android notification channel...');
+        debugPrint('[NotificationService] Setting up Android notification channel...');
         const androidChannel = AndroidNotificationChannel(
           'thygeson_meds',
           'Medicine reminders',
@@ -156,29 +167,29 @@ class NotificationService {
         final androidPlugin = _plugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
         if (androidPlugin != null) {
           await androidPlugin.createNotificationChannel(androidChannel);
-          print('[NotificationService] Android notification channel created');
+          debugPrint('[NotificationService] Android notification channel created');
           
           final permissionGranted = await androidPlugin.requestNotificationsPermission();
-          print('[NotificationService] Android notification permission granted: $permissionGranted');
+          debugPrint('[NotificationService] Android notification permission granted: $permissionGranted');
           
           // Check exact alarm permission (required for exactAllowWhileIdle on Android 12+)
           try {
             // Note: The plugin may handle this internally, but we log it for debugging
             final areNotificationsEnabled = await androidPlugin.areNotificationsEnabled();
-            print('[NotificationService] Android notifications enabled: $areNotificationsEnabled');
-            print('[NotificationService] Using AndroidScheduleMode.exactAllowWhileIdle - requires SCHEDULE_EXACT_ALARM permission');
-            print('[NotificationService] Note: On Android 12+, user must grant exact alarm permission in system settings');
+            debugPrint('[NotificationService] Android notifications enabled: $areNotificationsEnabled');
+            debugPrint('[NotificationService] Using AndroidScheduleMode.exactAllowWhileIdle - requires SCHEDULE_EXACT_ALARM permission');
+            debugPrint('[NotificationService] Note: On Android 12+, user must grant exact alarm permission in system settings');
           } catch (e) {
-            print('[NotificationService] Could not check exact alarm permission status: $e');
+            debugPrint('[NotificationService] Could not check exact alarm permission status: $e');
           }
         } else {
-          print('[NotificationService] WARNING: Android plugin not available');
+          debugPrint('[NotificationService] WARNING: Android plugin not available');
         }
       }
       
       // Request notification permissions on iOS
       if (Platform.isIOS) {
-        print('[NotificationService] Requesting iOS notification permissions...');
+        debugPrint('[NotificationService] Requesting iOS notification permissions...');
         final iosPlugin = _plugin.resolvePlatformSpecificImplementation<IOSFlutterLocalNotificationsPlugin>();
         if (iosPlugin != null) {
           final permissions = await iosPlugin.requestPermissions(
@@ -186,20 +197,20 @@ class NotificationService {
             badge: true,
             sound: true,
           );
-          print('[NotificationService] iOS notification permissions: $permissions');
+          debugPrint('[NotificationService] iOS notification permissions: $permissions');
         } else {
-          print('[NotificationService] WARNING: iOS plugin not available');
+          debugPrint('[NotificationService] WARNING: iOS plugin not available');
         }
       }
       
-      print('[NotificationService] Initialization complete');
+      debugPrint('[NotificationService] Initialization complete');
       
       // Handle the case where the app is LAUNCHED from a notification tap
       final launchDetails = await _plugin.getNotificationAppLaunchDetails();
       if (launchDetails?.didNotificationLaunchApp ?? false) {
         final launchResponse = launchDetails?.notificationResponse;
         if (launchResponse != null) {
-          print('[NotificationService] 🔔 App launched from notification tap!');
+          debugPrint('[NotificationService] 🔔 App launched from notification tap!');
           // #region agent log
           _debugLog('notification_service.dart:init', 'App launched from notification', {
             'actionId': launchResponse.actionId,
@@ -210,29 +221,29 @@ class NotificationService {
           // #endregion
           // Store for later - will be handled once callback is set in app.dart
           _pendingLaunchNotification = launchResponse;
-          print('[NotificationService] Stored launch notification for handling after app initialization');
+          debugPrint('[NotificationService] Stored launch notification for handling after app initialization');
         }
       }
       
       // Log permission status after initialization
       await logPermissionStatus();
     } catch (e, stackTrace) {
-      print('[NotificationService] ERROR during initialization: $e');
-      print('[NotificationService] Stack trace: $stackTrace');
+      debugPrint('[NotificationService] ERROR during initialization: $e');
+      debugPrint('[NotificationService] Stack trace: $stackTrace');
       rethrow;
     }
   }
 
   /// Handle notification tap - logs and triggers callback if set
   static void _onNotificationTap(NotificationResponse response) {
-    print('[NotificationService] ========================================');
-    print('[NotificationService] 🔔 NOTIFICATION TAPPED!');
-    print('[NotificationService] ========================================');
-    print('[NotificationService] actionId: ${response.actionId}');
-    print('[NotificationService] notificationId: ${response.id}');
-    print('[NotificationService] payload: ${response.payload}');
-    print('[NotificationService] input: ${response.input}');
-    print('[NotificationService] ========================================');
+    debugPrint('[NotificationService] ========================================');
+    debugPrint('[NotificationService] 🔔 NOTIFICATION TAPPED!');
+    debugPrint('[NotificationService] ========================================');
+    debugPrint('[NotificationService] actionId: ${response.actionId}');
+    debugPrint('[NotificationService] notificationId: ${response.id}');
+    debugPrint('[NotificationService] payload: ${response.payload}');
+    debugPrint('[NotificationService] input: ${response.input}');
+    debugPrint('[NotificationService] ========================================');
     
     // #region agent log
     _debugLog('notification_service.dart:_onNotificationTap', 'Notification tapped', {
@@ -254,12 +265,12 @@ class NotificationService {
         final scheduledDate = map['scheduledDate'] as String?;
         final scheduledTime = map['scheduledTime'] as String?;
         
-        print('[NotificationService] Parsed payload:');
-        print('[NotificationService]   - medicineId: $medicineId');
-        print('[NotificationService]   - scheduleId: $scheduleId');
-        print('[NotificationService]   - eye: $eyeStr');
-        print('[NotificationService]   - scheduledDate: $scheduledDate');
-        print('[NotificationService]   - scheduledTime: $scheduledTime');
+        debugPrint('[NotificationService] Parsed payload:');
+        debugPrint('[NotificationService]   - medicineId: $medicineId');
+        debugPrint('[NotificationService]   - scheduleId: $scheduleId');
+        debugPrint('[NotificationService]   - eye: $eyeStr');
+        debugPrint('[NotificationService]   - scheduledDate: $scheduledDate');
+        debugPrint('[NotificationService]   - scheduledTime: $scheduledTime');
         
         // #region agent log
         _debugLog('notification_service.dart:_onNotificationTap', 'Parsed notification payload', {
@@ -274,17 +285,17 @@ class NotificationService {
         // Trigger callback if all required fields are present and callback is set
         if (medicineId != null && scheduleId != null && eyeStr != null && scheduledDate != null && scheduledTime != null) {
           if (_onNotificationTapped != null) {
-            print('[NotificationService] Triggering notification tap callback');
+            debugPrint('[NotificationService] Triggering notification tap callback');
             _onNotificationTapped!(medicineId, scheduleId, eyeStr, scheduledDate, scheduledTime);
           } else {
-            print('[NotificationService] ⚠️ Notification tap callback not set');
+            debugPrint('[NotificationService] ⚠️ Notification tap callback not set');
           }
         } else {
-          print('[NotificationService] ⚠️ Missing required fields in payload');
+          debugPrint('[NotificationService] ⚠️ Missing required fields in payload');
         }
       }
     } catch (e) {
-      print('[NotificationService] Could not parse payload: $e');
+      debugPrint('[NotificationService] Could not parse payload: $e');
       // #region agent log
       _debugLog('notification_service.dart:_onNotificationTap', 'Failed to parse payload', {
         'error': e.toString(),
@@ -340,6 +351,7 @@ class NotificationService {
   /// Uses a simple incrementing counter that wraps back to 1 when it reaches the maximum.
   /// Each device maintains its own local counter (not synced across devices).
   /// This method is atomic to prevent duplicate IDs from concurrent calls.
+  // ignore: unused_element
   static Future<int> _getNextNotificationId() async {
     // Wait if another ID generation is in progress to prevent race conditions
     while (_idGenerationInProgress) {
@@ -350,7 +362,7 @@ class NotificationService {
     try {
       final storage = _storage;
       if (storage == null) {
-        print('[NotificationService] WARNING: Storage not available, using default ID 1');
+        debugPrint('[NotificationService] WARNING: Storage not available, using default ID 1');
         return 1;
       }
       
@@ -361,7 +373,7 @@ class NotificationService {
       int nextId = currentId + 1;
       if (nextId > maxId) {
         nextId = 1; // Wrap back to 1
-        print('[NotificationService] Notification ID counter wrapped from $maxId back to 1');
+        debugPrint('[NotificationService] Notification ID counter wrapped from $maxId back to 1');
       }
       
       // Save the next ID for future use
@@ -377,6 +389,7 @@ class NotificationService {
   /// Uses incrementing counter and tracks assignments for cancellation.
   /// Always generates a new ID - the map is used for tracking, not for reusing IDs.
   /// This version uses an in-memory counter that must be initialized first.
+  // ignore: unused_element
   static int _getIdInMemory(String medicineId, String scheduleId, int dayOfWeek, int timeIndex, int notificationOffset, int Function() getNextId) {
     final key = '$medicineId|$scheduleId|$dayOfWeek|$timeIndex|$notificationOffset';
     
@@ -404,14 +417,14 @@ class NotificationService {
     });
     // #endregion
     
-    print('[NotificationService] _localToTZDateTime: Converting $localTime (offset: ${localTime.timeZoneOffset})');
-    print('[NotificationService] _localToTZDateTime: Current tz.local.name = ${tz.local.name}');
+    debugPrint('[NotificationService] _localToTZDateTime: Converting $localTime (offset: ${localTime.timeZoneOffset})');
+    debugPrint('[NotificationService] _localToTZDateTime: Current tz.local.name = ${tz.local.name}');
     
     // If tz.local is still UTC (timezone setting failed), we need to handle it differently
     // The plugin expects TZDateTime in the device's local timezone, not UTC
     if (tz.local.name == 'UTC') {
-      print('[NotificationService] WARNING: tz.local is still UTC, timezone setting may have failed');
-      print('[NotificationService] Creating TZDateTime.utc() and letting plugin handle conversion');
+      debugPrint('[NotificationService] WARNING: tz.local is still UTC, timezone setting may have failed');
+      debugPrint('[NotificationService] Creating TZDateTime.utc() and letting plugin handle conversion');
       // Convert local time to UTC first
       final utcTime = localTime.toUtc();
       final result = tz.TZDateTime.utc(
@@ -422,7 +435,7 @@ class NotificationService {
         utcTime.minute,
         utcTime.second,
       );
-      print('[NotificationService] Created UTC TZDateTime: $result');
+      debugPrint('[NotificationService] Created UTC TZDateTime: $result');
       // #region agent log
       _debugLog('notification_service.dart:_localToTZDateTime:RESULT_UTC_FALLBACK', 'Created TZDateTime.utc (fallback)', {
         'localTime': localTime.toString(),
@@ -443,7 +456,7 @@ class NotificationService {
     // Use TZDateTime.from() with the local timezone (set in init())
     // This creates a TZDateTime in the system's local timezone, which the plugin can properly handle
     final result = tz.TZDateTime.from(localTime, tz.local);
-    print('[NotificationService] Created local TZDateTime: $result (timezone: ${tz.local.name})');
+    debugPrint('[NotificationService] Created local TZDateTime: $result (timezone: ${tz.local.name})');
     // #region agent log
     _debugLog('notification_service.dart:_localToTZDateTime:RESULT_LOCAL', 'Created TZDateTime.from with local timezone', {
       'localTime': localTime.toString(),
@@ -472,8 +485,8 @@ class NotificationService {
     Medicine medicine,
     int Function() getNextIdInMemory,
   ) async {
-    print('[NotificationService] Scheduling notifications for medicine: ${medicine.name} (ID: ${medicine.id})');
-    print('[NotificationService] Medicine has ${medicine.schedules.length} schedule(s)');
+    debugPrint('[NotificationService] Scheduling notifications for medicine: ${medicine.name} (ID: ${medicine.id})');
+    debugPrint('[NotificationService] Medicine has ${medicine.schedules.length} schedule(s)');
     
     int totalNotificationsScheduled = 0;
     int totalNotificationsFailed = 0;
@@ -483,12 +496,12 @@ class NotificationService {
     _notificationIdMap.removeWhere((key, _) => key.startsWith('${medicine.id}|'));
     
     for (final schedule in medicine.schedules) {
-        print('[NotificationService] Processing schedule ${schedule.id}: eye=${schedule.eye.name}, days=${schedule.daysOfWeek}, times=${schedule.times}');
+        debugPrint('[NotificationService] Processing schedule ${schedule.id}: eye=${schedule.eye.name}, days=${schedule.daysOfWeek}, times=${schedule.times}');
         
         for (final dayOfWeek in schedule.daysOfWeek) {
           for (var ti = 0; ti < schedule.times.length; ti++) {
             final time = schedule.times[ti];
-            print('[NotificationService] Processing time slot $ti: $time on day $dayOfWeek');
+            debugPrint('[NotificationService] Processing time slot $ti: $time on day $dayOfWeek');
             
             try {
               final parts = time.split(':');
@@ -497,8 +510,8 @@ class NotificationService {
               
               // Use system local time for date calculations (this gives us the correct local date)
               final systemNow = DateTime.now();
-              print('[NotificationService] System local time: $systemNow');
-              print('[NotificationService] System date components: year=${systemNow.year}, month=${systemNow.month}, day=${systemNow.day}, weekday=${systemNow.weekday}');
+              debugPrint('[NotificationService] System local time: $systemNow');
+              debugPrint('[NotificationService] System date components: year=${systemNow.year}, month=${systemNow.month}, day=${systemNow.day}, weekday=${systemNow.weekday}');
               
               // Create scheduled time using system local time (for correct date)
               // We'll work with DateTime for date logic, then convert to TZDateTime for scheduling
@@ -535,8 +548,8 @@ class NotificationService {
               // #endregion
               // Use systemNow.weekday for comparison (this is the actual local weekday)
               final todayWeekday = systemNow.weekday;
-              print('[NotificationService] Initial scheduled time (local): $scheduledLocal (weekday: $todayWeekday, target weekday: $dayOfWeek)');
-              print('[NotificationService] Scheduled date components: year=${scheduledLocal.year}, month=${scheduledLocal.month}, day=${scheduledLocal.day}');
+              debugPrint('[NotificationService] Initial scheduled time (local): $scheduledLocal (weekday: $todayWeekday, target weekday: $dayOfWeek)');
+              debugPrint('[NotificationService] Scheduled date components: year=${scheduledLocal.year}, month=${scheduledLocal.month}, day=${scheduledLocal.day}');
               
               // Check if today matches the target weekday (using system local time)
               if (todayWeekday == dayOfWeek) {
@@ -548,25 +561,25 @@ class NotificationService {
                   scheduledLocal = scheduledLocal.add(const Duration(days: 7));
                   // Update TZDateTime accordingly
                   scheduled = _localToTZDateTime(scheduledLocal);
-                  print('[NotificationService] Today matches but time passed, moved to next week: $scheduled');
+                  debugPrint('[NotificationService] Today matches but time passed, moved to next week: $scheduled');
                 } else {
                   // Scheduled time is now or in the future - use today
-                  print('[NotificationService] Today matches target weekday and time is in future (${timeDifference.inMinutes} minutes from now), scheduling for today');
+                  debugPrint('[NotificationService] Today matches target weekday and time is in future (${timeDifference.inMinutes} minutes from now), scheduling for today');
                   // scheduled already points to today, so we keep it
                 }
               } else {
                 // Today doesn't match the target weekday - find the next occurrence
-                print('[NotificationService] Today (weekday $todayWeekday) does not match target weekday $dayOfWeek, finding next occurrence');
+                debugPrint('[NotificationService] Today (weekday $todayWeekday) does not match target weekday $dayOfWeek, finding next occurrence');
                 var nextScheduledLocal = scheduledLocal;
                 while (nextScheduledLocal.weekday != dayOfWeek) {
                   nextScheduledLocal = nextScheduledLocal.add(const Duration(days: 1));
                 }
-                print('[NotificationService] Found next matching weekday: $nextScheduledLocal');
+                debugPrint('[NotificationService] Found next matching weekday: $nextScheduledLocal');
                 
                 // If the found day/time is in the past, move to next week
                 if (nextScheduledLocal.isBefore(systemNow)) {
                   nextScheduledLocal = nextScheduledLocal.add(const Duration(days: 7));
-                  print('[NotificationService] Found day was in past, moved to next week: $nextScheduledLocal');
+                  debugPrint('[NotificationService] Found day was in past, moved to next week: $nextScheduledLocal');
                 }
                 
                 // Update TZDateTime
@@ -574,8 +587,8 @@ class NotificationService {
                 scheduled = _localToTZDateTime(scheduledLocal);
               }
               
-              print('[NotificationService] Final scheduled occurrence: $scheduled');
-              print('[NotificationService] Final scheduled occurrence (local): $scheduledLocal');
+              debugPrint('[NotificationService] Final scheduled occurrence: $scheduled');
+              debugPrint('[NotificationService] Final scheduled occurrence (local): $scheduledLocal');
               
               // Use local date for the payload (not UTC date from TZDateTime)
               final scheduledDateStr = '${scheduledLocal.year}-${scheduledLocal.month.toString().padLeft(2, '0')}-${scheduledLocal.day.toString().padLeft(2, '0')}';
@@ -586,17 +599,17 @@ class NotificationService {
                 'scheduledDate': scheduledDateStr,
                 'scheduledTime': time,
               });
-              print('[NotificationService] Payload: $payload');
-              print('[NotificationService] Scheduled date in payload: $scheduledDateStr (from local time: $scheduledLocal)');
+              debugPrint('[NotificationService] Payload: $payload');
+              debugPrint('[NotificationService] Scheduled date in payload: $scheduledDateStr (from local time: $scheduledLocal)');
               
               // Get user's notification reminder preference
               final reminderPreference = _storage?.getNotificationReminderPreference() ?? const NotificationReminderPreference.defaultValue();
               final selectedReminderMinutes = reminderPreference.enabledReminders;
               
-              print('[NotificationService] Reading reminder preference for medicine ${medicine.name}:');
-              print('[NotificationService]   - Storage available: ${_storage != null}');
-              print('[NotificationService]   - Preference display: ${reminderPreference.displayName}');
-              print('[NotificationService]   - Enabled reminders: $selectedReminderMinutes');
+              debugPrint('[NotificationService] Reading reminder preference for medicine ${medicine.name}:');
+              debugPrint('[NotificationService]   - Storage available: ${_storage != null}');
+              debugPrint('[NotificationService]   - Preference display: ${reminderPreference.displayName}');
+              debugPrint('[NotificationService]   - Enabled reminders: $selectedReminderMinutes');
               
               // Schedule notifications based on user preference
               // All notifications repeat weekly on the same day of week
@@ -615,15 +628,15 @@ class NotificationService {
                 final shouldInclude = selectedReminderMinutes.contains(minutes);
                 if (shouldInclude) {
                   if (offset == 0) {
-                    print('[NotificationService]   - Including "at scheduled time" notification (enabled)');
+                    debugPrint('[NotificationService]   - Including "at scheduled time" notification (enabled)');
                   } else {
-                    print('[NotificationService]   - Including ${minutes} min reminder (enabled)');
+                    debugPrint('[NotificationService]   - Including $minutes min reminder (enabled)');
                   }
                 } else {
                   if (offset == 0) {
-                    print('[NotificationService]   - Filtering out "at scheduled time" notification (not enabled)');
+                    debugPrint('[NotificationService]   - Filtering out "at scheduled time" notification (not enabled)');
                   } else {
-                    print('[NotificationService]   - Filtering out ${minutes} min reminder (not enabled)');
+                    debugPrint('[NotificationService]   - Filtering out $minutes min reminder (not enabled)');
                   }
                 }
                 return shouldInclude;
@@ -631,11 +644,11 @@ class NotificationService {
               
               // Safety check: ensure at least one notification is included
               if (notificationTimes.isEmpty) {
-                print('[NotificationService] ⚠️ WARNING: No notifications enabled! Adding "at scheduled time" notification as fallback.');
+                debugPrint('[NotificationService] ⚠️ WARNING: No notifications enabled! Adding "at scheduled time" notification as fallback.');
                 notificationTimes = [allNotificationTimes.firstWhere((n) => n['offset'] == 0)];
               }
               
-              print('[NotificationService] Scheduling ${notificationTimes.length} notification(s): ${notificationTimes.map((n) => n['minutes'] == 0 ? 'at scheduled time' : '${n['minutes']} min before').join(', ')}');
+              debugPrint('[NotificationService] Scheduling ${notificationTimes.length} notification(s): ${notificationTimes.map((n) => n['minutes'] == 0 ? 'at scheduled time' : '${n['minutes']} min before').join(', ')}');
               
               for (final notifTime in notificationTimes) {
                 final offset = notifTime['offset'] as int;
@@ -674,42 +687,42 @@ class NotificationService {
                 // Skip this notification if it's already in the past (using local time comparison)
                 final notificationTimeDiff = notificationTimeLocal.difference(systemNow);
                 if (notificationTimeDiff.isNegative) {
-                  print('[NotificationService] Skipping notification (already in past):');
-                  print('  - ID: $id');
-                  print('  - Type: ${offset == 0 ? "At scheduled time" : offset == 1 ? "10 min before" : "15 min before"}');
-                  print('  - Notification time (local): $notificationTimeLocal');
-                  print('  - Current time (local): $systemNow');
-                  print('  - Time difference: ${notificationTimeDiff.inMinutes} minutes ago');
+                  debugPrint('[NotificationService] Skipping notification (already in past):');
+                  debugPrint('  - ID: $id');
+                  debugPrint('  - Type: ${offset == 0 ? "At scheduled time" : offset == 1 ? "10 min before" : "15 min before"}');
+                  debugPrint('  - Notification time (local): $notificationTimeLocal');
+                  debugPrint('  - Current time (local): $systemNow');
+                  debugPrint('  - Time difference: ${notificationTimeDiff.inMinutes} minutes ago');
                   totalNotificationsFailed++;
                   continue;
                 } else {
-                  print('[NotificationService] Notification time is in future: $notificationTimeLocal (${notificationTimeDiff.inMinutes} minutes from now)');
+                  debugPrint('[NotificationService] Notification time is in future: $notificationTimeLocal (${notificationTimeDiff.inMinutes} minutes from now)');
                 }
                 
                 // Validate ID is within 32-bit signed integer range
                 const max32BitInt = 2147483647;
                 if (id > max32BitInt || id < 1) {
-                  print('[NotificationService] ✗ ERROR: Notification ID $id is outside valid range (1-$max32BitInt)!');
-                  print('[NotificationService]   Components: medicineId=${medicine.id}, scheduleId=${schedule.id}, dayOfWeek=$dayOfWeek, timeIndex=$ti, offset=$offset');
+                  debugPrint('[NotificationService] ✗ ERROR: Notification ID $id is outside valid range (1-$max32BitInt)!');
+                  debugPrint('[NotificationService]   Components: medicineId=${medicine.id}, scheduleId=${schedule.id}, dayOfWeek=$dayOfWeek, timeIndex=$ti, offset=$offset');
                 }
                 
                 // Check for duplicate IDs within this scheduling call
                 if (scheduledIds.contains(id)) {
-                  print('[NotificationService] ✗ WARNING: Duplicate ID detected within same scheduling call: $id');
-                  print('[NotificationService]   Components: medicineId=${medicine.id}, scheduleId=${schedule.id}, dow=$dayOfWeek, ti=$ti, off=$offset');
-                  print('[NotificationService]   This notification will be skipped to avoid duplicates');
+                  debugPrint('[NotificationService] ✗ WARNING: Duplicate ID detected within same scheduling call: $id');
+                  debugPrint('[NotificationService]   Components: medicineId=${medicine.id}, scheduleId=${schedule.id}, dow=$dayOfWeek, ti=$ti, off=$offset');
+                  debugPrint('[NotificationService]   This notification will be skipped to avoid duplicates');
                   totalNotificationsFailed++;
                   continue;
                 }
                 
                 // Check if this ID is currently being scheduled by another call
                 if (_schedulingIds.contains(id)) {
-                  print('[NotificationService] ✗ WARNING: ID $id is already being scheduled by another call');
-                  print('[NotificationService]   Waiting for previous scheduling to complete...');
+                  debugPrint('[NotificationService] ✗ WARNING: ID $id is already being scheduled by another call');
+                  debugPrint('[NotificationService]   Waiting for previous scheduling to complete...');
                   // Wait a bit and check again
                   await Future.delayed(const Duration(milliseconds: 100));
                   if (_schedulingIds.contains(id)) {
-                    print('[NotificationService] ✗ Skipping duplicate ID $id (still being scheduled)');
+                    debugPrint('[NotificationService] ✗ Skipping duplicate ID $id (still being scheduled)');
                     totalNotificationsFailed++;
                     continue;
                   }
@@ -718,15 +731,15 @@ class NotificationService {
                 scheduledIds.add(id);
                 _schedulingIds.add(id);
                 
-                print('[NotificationService] Scheduling notification:');
-                print('  - ID: $id (medicineId=${medicine.id}, scheduleId=${schedule.id}, dow=$dayOfWeek, ti=$ti, off=$offset)');
-                print('  - Type: ${offset == 0 ? "At scheduled time" : offset == 1 ? "10 min before" : "15 min before"}');
-                print('  - Message: $message');
-                print('  - Notification time (local): $notificationTimeLocal');
-                print('  - Notification time (TZDateTime): $notificationTime');
-                print('  - Notification time (TZDateTime UTC): ${notificationTime.toUtc()}');
-                print('  - Notification time (TZDateTime year/month/day/hour/minute): ${notificationTime.year}/${notificationTime.month}/${notificationTime.day} ${notificationTime.hour}:${notificationTime.minute}');
-                print('  - Time until notification: ${notificationTimeDiff.inMinutes} minutes');
+                debugPrint('[NotificationService] Scheduling notification:');
+                debugPrint('  - ID: $id (medicineId=${medicine.id}, scheduleId=${schedule.id}, dow=$dayOfWeek, ti=$ti, off=$offset)');
+                debugPrint('  - Type: ${offset == 0 ? "At scheduled time" : offset == 1 ? "10 min before" : "15 min before"}');
+                debugPrint('  - Message: $message');
+                debugPrint('  - Notification time (local): $notificationTimeLocal');
+                debugPrint('  - Notification time (TZDateTime): $notificationTime');
+                debugPrint('  - Notification time (TZDateTime UTC): ${notificationTime.toUtc()}');
+                debugPrint('  - Notification time (TZDateTime year/month/day/hour/minute): ${notificationTime.year}/${notificationTime.month}/${notificationTime.day} ${notificationTime.hour}:${notificationTime.minute}');
+                debugPrint('  - Time until notification: ${notificationTimeDiff.inMinutes} minutes');
                 // #region agent log
                 _debugLog('notification_service.dart:scheduleForMedicine:BEFORE_ZONED_SCHEDULE', 'About to call zonedSchedule', {
                   'notificationTimeLocal': notificationTimeLocal.toString(),
@@ -770,11 +783,11 @@ class NotificationService {
                     matchDateTimeComponents: DateTimeComponents.dayOfWeekAndTime, // All repeat weekly
                     payload: payload,
                   );
-                  print('[NotificationService] ✓ Successfully scheduled notification ID $id');
+                  debugPrint('[NotificationService] ✓ Successfully scheduled notification ID $id');
                   totalNotificationsScheduled++;
                 } catch (e, stackTrace) {
-                  print('[NotificationService] ✗ ERROR scheduling notification ID $id: $e');
-                  print('[NotificationService] Stack trace: $stackTrace');
+                  debugPrint('[NotificationService] ✗ ERROR scheduling notification ID $id: $e');
+                  debugPrint('[NotificationService] Stack trace: $stackTrace');
                   totalNotificationsFailed++;
                 } finally {
                   // Remove from tracking set after scheduling attempt completes
@@ -782,8 +795,8 @@ class NotificationService {
                 }
               }
             } catch (e, stackTrace) {
-              print('[NotificationService] ✗ ERROR processing time slot $ti ($time): $e');
-              print('[NotificationService] Stack trace: $stackTrace');
+              debugPrint('[NotificationService] ✗ ERROR processing time slot $ti ($time): $e');
+              debugPrint('[NotificationService] Stack trace: $stackTrace');
               totalNotificationsFailed += 3; // Assume all 3 notifications failed
             }
           }
@@ -795,10 +808,10 @@ class NotificationService {
         _schedulingIds.remove(id);
       }
       
-      print('[NotificationService] Completed scheduling for medicine ${medicine.name}:');
-      print('[NotificationService]   - Successfully scheduled: $totalNotificationsScheduled');
-      print('[NotificationService]   - Failed: $totalNotificationsFailed');
-      print('[NotificationService]   - Unique IDs scheduled: ${scheduledIds.length}');
+      debugPrint('[NotificationService] Completed scheduling for medicine ${medicine.name}:');
+      debugPrint('[NotificationService]   - Successfully scheduled: $totalNotificationsScheduled');
+      debugPrint('[NotificationService]   - Failed: $totalNotificationsFailed');
+      debugPrint('[NotificationService]   - Unique IDs scheduled: ${scheduledIds.length}');
   }
 
   /// Schedule notifications for a medicine.
@@ -809,7 +822,7 @@ class NotificationService {
     IStorageService? storage,
     List<Medicine>? medicines,
   }) async {
-    print('[NotificationService] Rescheduling all notifications (medicine ${medicine.id} was added/modified)');
+    debugPrint('[NotificationService] Rescheduling all notifications (medicine ${medicine.id} was added/modified)');
     await rescheduleAllNotifications(storage: storage, medicines: medicines);
   }
 
@@ -821,18 +834,18 @@ class NotificationService {
     IStorageService? storage,
     List<Medicine>? medicines,
   }) async {
-    print('[NotificationService] Rescheduling all notifications (medicine $medicineId was deleted/modified)');
+    debugPrint('[NotificationService] Rescheduling all notifications (medicine $medicineId was deleted/modified)');
     await rescheduleAllNotifications(storage: storage, medicines: medicines);
   }
 
   static Future<void> cancelAll() async {
-    print('[NotificationService] Cancelling all notifications...');
+    debugPrint('[NotificationService] Cancelling all notifications...');
     try {
       await _plugin.cancelAll();
-      print('[NotificationService] ✓ All notifications cancelled');
+      debugPrint('[NotificationService] ✓ All notifications cancelled');
     } catch (e, stackTrace) {
-      print('[NotificationService] ✗ ERROR cancelling all notifications: $e');
-      print('[NotificationService] Stack trace: $stackTrace');
+      debugPrint('[NotificationService] ✗ ERROR cancelling all notifications: $e');
+      debugPrint('[NotificationService] Stack trace: $stackTrace');
       rethrow;
     }
   }
@@ -851,7 +864,7 @@ class NotificationService {
     IStorageService? storage,
     List<Medicine>? medicines,
   }) async {
-    print('[NotificationService] Rescheduling all notifications (dose logged for medicine $medicineId)');
+    debugPrint('[NotificationService] Rescheduling all notifications (dose logged for medicine $medicineId)');
     await rescheduleAllNotifications(storage: storage, medicines: medicines);
   }
   
@@ -864,14 +877,14 @@ class NotificationService {
   }) async {
     // Lock
     if (_reschedulingInProgress) {
-      print('[NotificationService] ⚠️ Rescheduling already in progress, skipping');
+      debugPrint('[NotificationService] ⚠️ Rescheduling already in progress, skipping');
       return;
     }
     _reschedulingInProgress = true;
     
     final storageToUse = storage ?? _storage;
     if (storageToUse == null) {
-      print('[NotificationService] ✗ ERROR: Storage service not set, cannot reschedule');
+      debugPrint('[NotificationService] ✗ ERROR: Storage service not set, cannot reschedule');
       _reschedulingInProgress = false;
       return;
     }
@@ -883,13 +896,13 @@ class NotificationService {
     
     const maxId = 2147483647;
     int currentNotificationId = storageToUse.getNextNotificationId();
-    print('[NotificationService] Loaded notification ID counter: $currentNotificationId');
+    debugPrint('[NotificationService] Loaded notification ID counter: $currentNotificationId');
     
     int getNextIdInMemory() {
       currentNotificationId++;
       if (currentNotificationId > maxId) {
         currentNotificationId = 1;
-        print('[NotificationService] Notification ID counter wrapped from $maxId back to 1');
+        debugPrint('[NotificationService] Notification ID counter wrapped from $maxId back to 1');
       }
       return currentNotificationId - 1;
     }
@@ -899,13 +912,13 @@ class NotificationService {
       // IMPORTANT: If called without an explicit storage (startup timing / storage not wired yet),
       // we do NOT want to cancel everything and then discover 0 medicines.
       final medicinesToSchedule = medicines ?? storageToUse.getMedicines();
-      print('[NotificationService] Rescheduling notifications for ${medicinesToSchedule.length} medicine(s)');
+      debugPrint('[NotificationService] Rescheduling notifications for ${medicinesToSchedule.length} medicine(s)');
 
       // If we were called without an explicit storage and we see no medicines, assume the system
       // isn't fully wired yet (e.g. NotificationService.setStorage not called, or wrong instance)
       // and avoid wiping existing scheduled notifications.
       if (medicinesToSchedule.isEmpty && storage == null && medicines == null) {
-        print('[NotificationService] ⚠️ Medicines list is empty (no explicit storage provided). Skipping cancel+reschedule to avoid wiping notifications.');
+        debugPrint('[NotificationService] ⚠️ Medicines list is empty (no explicit storage provided). Skipping cancel+reschedule to avoid wiping notifications.');
         return;
       }
 
@@ -913,16 +926,16 @@ class NotificationService {
       try {
         await _plugin.cancelAll();
         _clearNotificationIdMappings();
-        print('[NotificationService] Cancelled all old notifications');
+        debugPrint('[NotificationService] Cancelled all old notifications');
       } catch (e) {
         // Handle ProGuard/R8 issues in release builds gracefully
-        print('[NotificationService] ⚠️ Error cancelling notifications (non-fatal): $e');
+        debugPrint('[NotificationService] ⚠️ Error cancelling notifications (non-fatal): $e');
         // Clear mappings anyway to prevent stale state
         _clearNotificationIdMappings();
       }
       
       if (medicinesToSchedule.isEmpty) {
-        print('[NotificationService] No medicines found, nothing to schedule');
+        debugPrint('[NotificationService] No medicines found, nothing to schedule');
         return;
       }
       
@@ -935,10 +948,10 @@ class NotificationService {
       for (var i = 0; i < medicinesToSchedule.length; i++) {
         final medicine = medicinesToSchedule[i];
         try {
-          print('[NotificationService] Rescheduling medicine ${i + 1}/${medicinesToSchedule.length}: ${medicine.name} (ID: ${medicine.id})');
+          debugPrint('[NotificationService] Rescheduling medicine ${i + 1}/${medicinesToSchedule.length}: ${medicine.name} (ID: ${medicine.id})');
           await _scheduleForMedicineInternal(medicine, getNextIdInMemory);
           successCount++;
-          print('[NotificationService] ✓ Successfully rescheduled ${medicine.name}');
+          debugPrint('[NotificationService] ✓ Successfully rescheduled ${medicine.name}');
           
           // Add delay between medicines on iOS to avoid hitting system limits
           // Skip delay after the last medicine
@@ -947,8 +960,8 @@ class NotificationService {
           }
         } catch (e, stackTrace) {
           failureCount++;
-          print('[NotificationService] ✗ Failed to reschedule medicine ${medicine.name} (ID: ${medicine.id}): $e');
-          print('[NotificationService] Stack trace: $stackTrace');
+          debugPrint('[NotificationService] ✗ Failed to reschedule medicine ${medicine.name} (ID: ${medicine.id}): $e');
+          debugPrint('[NotificationService] Stack trace: $stackTrace');
           // Still add delay even on error to maintain spacing
           if (i < medicinesToSchedule.length - 1) {
             await Future.delayed(Duration(milliseconds: delayBetweenMedicines));
@@ -958,14 +971,14 @@ class NotificationService {
       
       // Save notification ID counter
       await storageToUse.setNextNotificationId(currentNotificationId);
-      print('[NotificationService] Saved notification ID counter: $currentNotificationId');
+      debugPrint('[NotificationService] Saved notification ID counter: $currentNotificationId');
       
-      print('[NotificationService] Rescheduling complete:');
-      print('[NotificationService]   - Successfully rescheduled: $successCount');
-      print('[NotificationService]   - Failed: $failureCount');
+      debugPrint('[NotificationService] Rescheduling complete:');
+      debugPrint('[NotificationService]   - Successfully rescheduled: $successCount');
+      debugPrint('[NotificationService]   - Failed: $failureCount');
     } catch (e, stackTrace) {
-      print('[NotificationService] ✗ ERROR rescheduling all notifications: $e');
-      print('[NotificationService] Stack trace: $stackTrace');
+      debugPrint('[NotificationService] ✗ ERROR rescheduling all notifications: $e');
+      debugPrint('[NotificationService] Stack trace: $stackTrace');
       // Try to save counter even on error
       try {
         await storageToUse.setNextNotificationId(currentNotificationId);
@@ -982,11 +995,11 @@ class NotificationService {
   static Future<List<PendingNotificationRequest>> getPendingNotifications() async {
     try {
       final notifications = await _plugin.pendingNotificationRequests();
-      print('[NotificationService] Retrieved ${notifications.length} pending notification(s) from system');
+      debugPrint('[NotificationService] Retrieved ${notifications.length} pending notification(s) from system');
       return notifications;
     } catch (e, stackTrace) {
-      print('[NotificationService] ✗ ERROR getting pending notifications: $e');
-      print('[NotificationService] Stack trace: $stackTrace');
+      debugPrint('[NotificationService] ✗ ERROR getting pending notifications: $e');
+      debugPrint('[NotificationService] Stack trace: $stackTrace');
       rethrow;
     }
   }
@@ -997,7 +1010,7 @@ class NotificationService {
   /// Schedule a test notification at a specific delay in the future (for testing/debugging)
   /// Uses a fixed ID so re-scheduling replaces any previous test notification
   static Future<void> showTestNotification({Duration delay = const Duration(seconds: 5)}) async {
-    print('[NotificationService] Scheduling test notification with delay: ${delay.inSeconds}s...');
+    debugPrint('[NotificationService] Scheduling test notification with delay: ${delay.inSeconds}s...');
     
     try {
       // Cancel any existing test notification first
@@ -1006,9 +1019,9 @@ class NotificationService {
       final now = tz.TZDateTime.now(tz.local);
       final scheduledTime = now.add(delay);
       
-      print('[NotificationService] Current time: $now');
-      print('[NotificationService] Scheduling test notification for: $scheduledTime');
-      print('[NotificationService] Time difference: ${delay.inSeconds} seconds');
+      debugPrint('[NotificationService] Current time: $now');
+      debugPrint('[NotificationService] Scheduling test notification for: $scheduledTime');
+      debugPrint('[NotificationService] Time difference: ${delay.inSeconds} seconds');
       
       await _plugin.zonedSchedule(
         _testNotificationId,
@@ -1035,29 +1048,29 @@ class NotificationService {
         androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
         uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
       );
-      print('[NotificationService] ✓ Test notification scheduled for $scheduledTime (ID: $_testNotificationId)');
+      debugPrint('[NotificationService] ✓ Test notification scheduled for $scheduledTime (ID: $_testNotificationId)');
     } catch (e, stackTrace) {
-      print('[NotificationService] ✗ ERROR scheduling test notification: $e');
-      print('[NotificationService] Stack trace: $stackTrace');
+      debugPrint('[NotificationService] ✗ ERROR scheduling test notification: $e');
+      debugPrint('[NotificationService] Stack trace: $stackTrace');
       rethrow;
     }
   }
   
   /// Check and log notification permission status (for debugging)
   static Future<void> logPermissionStatus() async {
-    print('[NotificationService] Checking notification permission status...');
+    debugPrint('[NotificationService] Checking notification permission status...');
     
     if (Platform.isAndroid) {
       final androidPlugin = _plugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
       if (androidPlugin != null) {
         try {
           final permissionGranted = await androidPlugin.areNotificationsEnabled();
-          print('[NotificationService] Android notifications enabled: $permissionGranted');
+          debugPrint('[NotificationService] Android notifications enabled: $permissionGranted');
         } catch (e) {
-          print('[NotificationService] Could not check Android notification status: $e');
+          debugPrint('[NotificationService] Could not check Android notification status: $e');
         }
       } else {
-        print('[NotificationService] Android plugin not available');
+        debugPrint('[NotificationService] Android plugin not available');
       }
     } else if (Platform.isIOS) {
       final iosPlugin = _plugin.resolvePlatformSpecificImplementation<IOSFlutterLocalNotificationsPlugin>();
@@ -1065,18 +1078,18 @@ class NotificationService {
         try {
           final permissions = await iosPlugin.checkPermissions();
           if (permissions != null) {
-            print('[NotificationService] iOS notification permissions: $permissions');
+            debugPrint('[NotificationService] iOS notification permissions: $permissions');
           } else {
-            print('[NotificationService] iOS notification permissions: null (not yet requested)');
+            debugPrint('[NotificationService] iOS notification permissions: null (not yet requested)');
           }
         } catch (e) {
-          print('[NotificationService] Could not check iOS notification status: $e');
+          debugPrint('[NotificationService] Could not check iOS notification status: $e');
         }
       } else {
-        print('[NotificationService] iOS plugin not available');
+        debugPrint('[NotificationService] iOS plugin not available');
       }
     } else {
-      print('[NotificationService] Platform: ${Platform.operatingSystem}');
+      debugPrint('[NotificationService] Platform: ${Platform.operatingSystem}');
     }
   }
   

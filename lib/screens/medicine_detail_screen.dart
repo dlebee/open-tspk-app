@@ -189,7 +189,7 @@ class _MedicineDetailScreenState extends ConsumerState<MedicineDetailScreen> {
     try {
       await ref.read(medicinesProvider.notifier).delete(id);
     } catch (_) {
-      if (mounted) {
+      if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Failed to delete')),
         );

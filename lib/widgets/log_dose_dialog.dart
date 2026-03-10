@@ -29,7 +29,7 @@ class _LogDoseDialogState extends ConsumerState<LogDoseDialog> {
           mainAxisSize: MainAxisSize.min,
           children: [
             DropdownButtonFormField<Medicine>(
-              value: _medicine,
+              initialValue: _medicine,
               decoration: const InputDecoration(labelText: 'Medicine'),
               items: widget.medicines
                   .map((m) => DropdownMenuItem(value: m, child: Text(m.name)))
@@ -127,7 +127,7 @@ class _LogDoseDialogState extends ConsumerState<LogDoseDialog> {
                     takenAt: _takenAt,
                   );
                   await ref.read(dosesProvider.notifier).add(dose);
-                  if (mounted) Navigator.pop(context);
+                  if (context.mounted) Navigator.pop(context);
                 },
           child: const Text('Save'),
         ),

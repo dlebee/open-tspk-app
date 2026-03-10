@@ -186,10 +186,6 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
       ),
     );
   }
-
-  String _formatDate(DateTime d) {
-    return '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
-  }
 }
 
 class _MonthGrid extends ConsumerWidget {
@@ -258,7 +254,7 @@ class _MonthGrid extends ConsumerWidget {
                             ? Theme.of(context).colorScheme.primaryContainer
                             : isCurrentMonth
                                 ? null
-                                : Theme.of(context).colorScheme.surfaceContainerHighest.withOpacity(0.3),
+                                : Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Column(

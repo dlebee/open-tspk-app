@@ -343,7 +343,7 @@ class _NotificationExplorerScreenState extends ConsumerState<NotificationExplore
                     Container(
                       width: double.infinity,
                       padding: const EdgeInsets.all(8),
-                      color: Theme.of(context).colorScheme.surfaceVariant,
+                      color: Theme.of(context).colorScheme.surfaceContainerHighest,
                       child: Column(
                         children: [
                           Text(
@@ -574,7 +574,7 @@ class _NotificationCard extends StatelessWidget {
                     width: double.infinity,
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.surfaceVariant,
+                      color: Theme.of(context).colorScheme.surfaceContainerHighest,
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: Text(

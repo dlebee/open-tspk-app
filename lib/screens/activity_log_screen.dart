@@ -116,7 +116,7 @@ class _ActivityTile extends StatelessWidget {
       leading = FlareUpEyes(flareUp: item.flareUp!, size: 22);
     } else {
       leading = CircleAvatar(
-        backgroundColor: color.withOpacity(0.2),
+        backgroundColor: color.withValues(alpha: 0.2),
         child: Icon(icon, color: color),
       );
     }

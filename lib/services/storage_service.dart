@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -157,24 +158,24 @@ class LocalStorageService implements IStorageService {
   @override
   NotificationReminderPreference getNotificationReminderPreference() {
     final raw = _preferences?.get('notificationReminderPreference');
-    print('[StorageService] Reading notification reminder preference. Raw value: $raw');
+    debugPrint('[StorageService] Reading notification reminder preference. Raw value: $raw');
     if (raw == null) {
-      print('[StorageService] No preference found, returning default');
+      debugPrint('[StorageService] No preference found, returning default');
       return const NotificationReminderPreference.defaultValue();
     }
     final pref = NotificationReminderPreference.fromJson(raw);
-    print('[StorageService] Parsed preference: ${pref.enabledReminders}');
+    debugPrint('[StorageService] Parsed preference: ${pref.enabledReminders}');
     return pref;
   }
 
   @override
   Future<void> setNotificationReminderPreference(NotificationReminderPreference preference) async {
     final json = preference.toJson();
-    print('[StorageService] Saving notification reminder preference: $json (enabled: ${preference.enabledReminders})');
+    debugPrint('[StorageService] Saving notification reminder preference: $json (enabled: ${preference.enabledReminders})');
     await _preferences?.put('notificationReminderPreference', json);
     // Verify it was saved
     final savedRaw = _preferences?.get('notificationReminderPreference');
-    print('[StorageService] Verification - saved value: $savedRaw');
+    debugPrint('[StorageService] Verification - saved value: $savedRaw');
   }
 
   @override

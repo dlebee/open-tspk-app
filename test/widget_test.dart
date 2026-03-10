@@ -7,13 +7,15 @@ import 'package:thygeson/services/storage_service.dart';
 
 void main() {
   testWidgets('App smoke test', (WidgetTester tester) async {
-    final storage = StorageService();
+    final storage = LocalStorageService();
     await storage.init();
 
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          storageServiceProvider.overrideWithValue(storage),
+          storageServiceProvider.overrideWith(
+            (ref) => StorageServiceNotifier.withStorage(storage),
+          ),
         ],
         child: const ThygesonApp(),
       ),

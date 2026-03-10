@@ -136,7 +136,7 @@ class LogScheduledDoseDialog extends ConsumerWidget {
         );
       } catch (e) {
         // Non-fatal: notification cancellation can fail in release builds due to ProGuard
-        print('[LogScheduledDoseDialog] Warning: Failed to cancel notifications: $e');
+        debugPrint('[LogScheduledDoseDialog] Warning: Failed to cancel notifications: $e');
       }
       
       await ref.read(dosesProvider.notifier).add(newDose);
@@ -151,7 +151,7 @@ class LogScheduledDoseDialog extends ConsumerWidget {
           ),
         );
       }
-      print('[LogScheduledDoseDialog] Error logging dose: $e');
+      debugPrint('[LogScheduledDoseDialog] Error logging dose: $e');
     }
   }
 
@@ -171,7 +171,7 @@ class LogScheduledDoseDialog extends ConsumerWidget {
           ),
         );
       }
-      print('[LogScheduledDoseDialog] Error untaking dose: $e');
+      debugPrint('[LogScheduledDoseDialog] Error untaking dose: $e');
     }
   }
 }

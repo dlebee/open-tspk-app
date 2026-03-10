@@ -33,7 +33,6 @@ final unscheduledDosesForDateProvider = Provider.family<List<MedicineDose>, Date
 final unscheduledDosesForRangeProvider = Provider.family<Map<DateTime, List<MedicineDose>>, ({DateTime start, DateTime end})>((ref, range) {
   final doses = ref.watch(dosesProvider).valueOrNull ?? [];
   final result = <DateTime, List<MedicineDose>>{};
-  var d = DateTime(range.start.year, range.start.month, range.start.day);
   final end = DateTime(range.end.year, range.end.month, range.end.day);
 
   for (final dose in doses) {
@@ -212,7 +211,6 @@ final flareUpsForDateProvider = Provider.family<List<FlareUp>, DateTime>((ref, d
 final flareUpsForRangeProvider = Provider.family<Map<DateTime, List<FlareUp>>, ({DateTime start, DateTime end})>((ref, range) {
   final flareUps = ref.watch(flareUpsProvider).valueOrNull ?? [];
   final result = <DateTime, List<FlareUp>>{};
-  var d = DateTime(range.start.year, range.start.month, range.start.day);
   final end = DateTime(range.end.year, range.end.month, range.end.day);
 
   for (final flareUp in flareUps) {
@@ -239,7 +237,6 @@ final appointmentsForDateProvider = Provider.family<List<AppointmentNote>, DateT
 final appointmentsForRangeProvider = Provider.family<Map<DateTime, List<AppointmentNote>>, ({DateTime start, DateTime end})>((ref, range) {
   final appointments = ref.watch(appointmentsProvider).valueOrNull ?? [];
   final result = <DateTime, List<AppointmentNote>>{};
-  var d = DateTime(range.start.year, range.start.month, range.start.day);
   final end = DateTime(range.end.year, range.end.month, range.end.day);
 
   for (final appointment in appointments) {

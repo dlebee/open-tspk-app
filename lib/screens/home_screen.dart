@@ -9,7 +9,6 @@ import '../providers/appointment_provider.dart';
 import '../providers/calendar_provider.dart';
 import '../providers/medicine_provider.dart';
 import '../utils/date_utils.dart';
-import '../providers/appointment_provider.dart';
 import '../screens/appointments_screen.dart' show AppointmentForm;
 import '../widgets/log_dose_dialog.dart';
 import '../widgets/log_flare_up_sheet.dart';
@@ -305,7 +304,7 @@ class _DoseTile extends StatelessWidget {
       child: ListTile(
         onTap: onTap,
         leading: CircleAvatar(
-          backgroundColor: statusColor.withOpacity(0.2),
+          backgroundColor: statusColor.withValues(alpha: 0.2),
           child: Icon(Icons.medication, color: statusColor),
         ),
         title: Text('${dose.medicineName} - ${dose.eye.name}'),
@@ -323,7 +322,7 @@ class _DoseTile extends StatelessWidget {
             dose.status.name,
             style: const TextStyle(fontSize: 12),
           ),
-          backgroundColor: statusColor.withOpacity(0.2),
+          backgroundColor: statusColor.withValues(alpha: 0.2),
         ),
       ),
     );
@@ -355,7 +354,7 @@ class _UnscheduledDoseTile extends StatelessWidget {
       child: ListTile(
         onTap: onTap,
         leading: CircleAvatar(
-          backgroundColor: Colors.green.withOpacity(0.2),
+          backgroundColor: Colors.green.withValues(alpha: 0.2),
           child: Icon(Icons.medication, color: Colors.green),
         ),
         title: Text('$medicineName - ${dose.eye.name}'),

@@ -5,7 +5,7 @@ import '../models/appointment_note.dart';
 import '../providers/appointment_provider.dart';
 
 class AppointmentForm extends StatefulWidget {
-  const AppointmentForm({this.existing, required this.onSave, this.onDelete});
+  const AppointmentForm({super.key, this.existing, required this.onSave, this.onDelete});
 
   final AppointmentNote? existing;
   final ValueChanged<AppointmentNote> onSave;
@@ -303,7 +303,7 @@ class AppointmentsScreen extends ConsumerWidget {
         },
         onDelete: existing != null
             ? () async {
-                await ref.read(appointmentsProvider.notifier).delete(existing!.id);
+                await ref.read(appointmentsProvider.notifier).delete(existing.id);
                 if (ctx.mounted) Navigator.pop(ctx);
               }
             : null,

@@ -25,7 +25,7 @@ class EyePainIcon extends StatelessWidget {
       opacity: opacity,
       child: Transform(
         alignment: Alignment.center,
-        transform: Matrix4.identity()..scale(flip ? -1.0 : 1.0, 1.0),
+        transform: Matrix4.diagonal3Values(flip ? -1.0 : 1.0, 1.0, 1.0),
         child: SvgPicture.asset(
           'assets/icons/eye.svg',
           width: size,

@@ -1,7 +1,7 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/medicine.dart';
-import '../models/medicine_dose.dart';
 import '../services/notification_service.dart';
 import '../services/storage_service.dart';
 import 'storage_provider.dart';
@@ -25,7 +25,7 @@ class MedicinesNotifier extends StateNotifier<AsyncValue<List<Medicine>>> {
       state = AsyncValue.data(list);
       // Reschedule notifications once on initial load (cancel all + recreate).
       if (list.isNotEmpty) {
-        print('[MedicineProvider] Initial load: scheduling notifications for ${list.length} medicine(s)');
+        debugPrint('[MedicineProvider] Initial load: scheduling notifications for ${list.length} medicine(s)');
         _rescheduleAllNotificationsInBackground(list);
       }
     } catch (e, st) {
@@ -34,7 +34,7 @@ class MedicinesNotifier extends StateNotifier<AsyncValue<List<Medicine>>> {
   }
 
   void _rescheduleAllNotificationsInBackground(List<Medicine> medicines) {
-    print('[MedicineProvider] Scheduling notifications for ${medicines.length} medicine(s) in background');
+    debugPrint('[MedicineProvider] Scheduling notifications for ${medicines.length} medicine(s) in background');
     Future.microtask(() async {
       try {
         await NotificationService.rescheduleAllNotifications(
@@ -42,10 +42,10 @@ class MedicinesNotifier extends StateNotifier<AsyncValue<List<Medicine>>> {
           medicines: medicines,
         );
       } catch (e, stackTrace) {
-        print('[MedicineProvider] ✗ Failed to reschedule notifications on initial load: $e');
-        print('[MedicineProvider] Stack trace: $stackTrace');
+        debugPrint('[MedicineProvider] ✗ Failed to reschedule notifications on initial load: $e');
+        debugPrint('[MedicineProvider] Stack trace: $stackTrace');
       }
-      print('[MedicineProvider] Completed background notification scheduling');
+      debugPrint('[MedicineProvider] Completed background notification scheduling');
     });
   }
 
@@ -119,10 +119,10 @@ class MedicinesNotifier extends StateNotifier<AsyncValue<List<Medicine>>> {
     
     // Only reschedule notifications if schedules actually changed
     if (schedulesChanged) {
-      print('[MedicineProvider] Schedules changed for medicine ${medicine.name}, rescheduling notifications');
+      debugPrint('[MedicineProvider] Schedules changed for medicine ${medicine.name}, rescheduling notifications');
       _rescheduleAllNotificationsInBackground(updated);
     } else {
-      print('[MedicineProvider] Schedules unchanged for medicine ${medicine.name}, skipping notification rescheduling');
+      debugPrint('[MedicineProvider] Schedules unchanged for medicine ${medicine.name}, skipping notification rescheduling');
     }
   }
 
