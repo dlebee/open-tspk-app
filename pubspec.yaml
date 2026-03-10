@@ -106,3 +106,7 @@ flutter_launcher_icons:
   image_path: "assets/icons/thygeson_logo.png"
   min_sdk_android: 21
   remove_alpha_ios: true
+
+# Use fixed FFI implementation (requires Flutter 3.38.4+). See flutter/flutter#178915.
+dependency_overrides:
+  path_provider_foundation: 2.6.0

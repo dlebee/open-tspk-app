@@ -3,20 +3,21 @@ import UIKit
 import UserNotifications
 
 @main
-@objc class AppDelegate: FlutterAppDelegate {
+@objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
   override func application(
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
-    GeneratedPluginRegistrant.register(with: self)
-    
     // Set up notification delegate for handling taps when app is backgrounded/terminated
     // Note: flutter_local_notifications plugin should handle this, but we ensure it's set
     if #available(iOS 10.0, *) {
       UNUserNotificationCenter.current().delegate = self
     }
-    
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+  }
+
+  func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
+    GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
   }
   
   // Handle notification tap when app is in foreground
