@@ -68,8 +68,8 @@ class _ThygesonAppState extends ConsumerState<ThygesonApp> {
           final ctx = navigatorKey.currentContext;
           if (ctx != null && ctx.mounted) {
             // Ensure providers are loaded before showing dialog
-            final medicines = ref.read(medicinesProvider).valueOrNull;
-            final doses = ref.read(dosesProvider).valueOrNull;
+            final medicines = ref.read(medicinesProvider).value;
+            final doses = ref.read(dosesProvider).value;
             
             if (medicines != null && doses != null) {
               _handleNotificationTap(ctx, ref, medicineId, scheduleId, eyeStr, scheduledDate, scheduledTime);
@@ -129,7 +129,7 @@ class _ThygesonAppState extends ConsumerState<ThygesonApp> {
     Navigator.of(context).popUntil((route) => route.isFirst);
     
     // Get medicine and schedule to create ScheduledDose
-    final medicines = ref.read(medicinesProvider).valueOrNull ?? [];
+    final medicines = ref.read(medicinesProvider).value ?? [];
     final medicine = medicines.firstWhere(
       (m) => m.id == medicineId,
       orElse: () => Medicine(name: 'Unknown', schedules: [], createdAt: DateTime.now()),
@@ -153,7 +153,7 @@ class _ThygesonAppState extends ConsumerState<ThygesonApp> {
     final scheduledDt = DateTime.parse(scheduledDate);
     
     // Check if dose already exists
-    final doses = ref.read(dosesProvider).valueOrNull ?? [];
+    final doses = ref.read(dosesProvider).value ?? [];
     MedicineDose? existingDose;
     try {
       existingDose = doses.firstWhere(

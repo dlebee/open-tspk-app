@@ -21,13 +21,13 @@ class GoogleDriveAdapter implements ICloudSyncAdapter {
   static const String _flareUpsFile = 'flareUps.json';
   static const String _appointmentsFile = 'appointments.json';
 
+  static const List<String> _driveScope = [
+    'https://www.googleapis.com/auth/drive.appdata',
+  ];
+
   GoogleDriveAdapter() {
     if (Platform.isAndroid) {
-      _googleSignIn = GoogleSignIn(
-        scopes: [
-          'https://www.googleapis.com/auth/drive.appdata',
-        ],
-      );
+      _googleSignIn = GoogleSignIn.instance;
     }
   }
 
@@ -36,7 +36,9 @@ class GoogleDriveAdapter implements ICloudSyncAdapter {
     if (!Platform.isAndroid) {
       throw UnsupportedError('Google Drive adapter is only available on Android');
     }
-    // Initialization happens when user signs in
+    if (_googleSignIn != null) {
+      await _googleSignIn!.initialize();
+    }
   }
 
   Future<void> _ensureSignedIn() async {
@@ -44,13 +46,14 @@ class GoogleDriveAdapter implements ICloudSyncAdapter {
       throw UnsupportedError('Google Sign-In not available');
     }
 
-    final account = await _googleSignIn!.signInSilently();
+    final account = await _googleSignIn!.attemptLightweightAuthentication();
     if (account == null) {
       throw Exception('Not signed in to Google Drive');
     }
 
     if (_driveApi == null) {
-      final authHeaders = await account.authHeaders;
+      final authHeaders = await account.authorizationClient.authorizationHeaders(_driveScope);
+      if (authHeaders == null) throw Exception('Failed to obtain authorization headers');
       final client = GoogleAuthClient(authHeaders);
       _driveApi = drive.DriveApi(client);
     }
@@ -65,7 +68,7 @@ class GoogleDriveAdapter implements ICloudSyncAdapter {
   Future<bool> isSignedIn() async {
     if (_googleSignIn == null) return false;
     try {
-      final account = await _googleSignIn!.signInSilently();
+      final account = await _googleSignIn!.attemptLightweightAuthentication();
       return account != null;
     } catch (_) {
       return false;
@@ -77,11 +80,11 @@ class GoogleDriveAdapter implements ICloudSyncAdapter {
     if (_googleSignIn == null) {
       throw UnsupportedError('Google Sign-In not available');
     }
-    final account = await _googleSignIn!.signIn();
-    if (account == null) {
-      throw Exception('Google sign-in was cancelled');
-    }
-    final authHeaders = await account.authHeaders;
+    final account = await _googleSignIn!.authenticate(
+      scopeHint: _driveScope,
+    );
+    final authHeaders = await account.authorizationClient.authorizationHeaders(_driveScope);
+    if (authHeaders == null) throw Exception('Failed to obtain authorization headers');
     final client = GoogleAuthClient(authHeaders);
     _driveApi = drive.DriveApi(client);
   }

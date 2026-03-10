@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 
 import '../models/flare_up.dart';
 import '../services/storage_service.dart';
@@ -26,21 +27,21 @@ class FlareUpsNotifier extends StateNotifier<AsyncValue<List<FlareUp>>> {
   }
 
   Future<void> add(FlareUp flareUp) async {
-    final list = state.valueOrNull ?? [];
+    final list = state.value ?? [];
     final updated = [...list, flareUp];
     await _storage.saveFlareUps(updated);
     state = AsyncValue.data(updated);
   }
 
   Future<void> update(FlareUp flareUp) async {
-    final list = state.valueOrNull ?? [];
+    final list = state.value ?? [];
     final updated = list.map((f) => f.id == flareUp.id ? flareUp : f).toList();
     await _storage.saveFlareUps(updated);
     state = AsyncValue.data(updated);
   }
 
   Future<void> delete(String id) async {
-    final list = state.valueOrNull ?? [];
+    final list = state.value ?? [];
     final updated = list.where((f) => f.id != id).toList();
     await _storage.saveFlareUps(updated);
     state = AsyncValue.data(updated);

@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 
 import '../services/cloud_sync/cloud_sync_adapter.dart';
 import '../services/cloud_sync/cloud_sync_service.dart';

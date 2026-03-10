@@ -447,7 +447,7 @@ class _TodayView extends ConsumerWidget {
     final unscheduledDoses = ref.watch(unscheduledDosesForDateProvider(dateKey));
     final flareUps = ref.watch(flareUpsForDateProvider(dateKey));
     final appointments = ref.watch(appointmentsForDateProvider(dateKey));
-    final medicines = ref.watch(medicinesProvider).valueOrNull ?? [];
+    final medicines = ref.watch(medicinesProvider).value ?? [];
     final medicineById = {for (final m in medicines) m.id: m};
 
     final hasScheduled = scheduledDoses.isNotEmpty;
@@ -597,7 +597,7 @@ class _DayDetailSheet extends ConsumerWidget {
     final unscheduledDoses = ref.watch(unscheduledDosesForDateProvider(date));
     final flareUps = ref.watch(flareUpsForDateProvider(date));
     final appointments = ref.watch(appointmentsForDateProvider(date));
-    final medicines = ref.watch(medicinesProvider).valueOrNull ?? [];
+    final medicines = ref.watch(medicinesProvider).value ?? [];
     final medicineById = {for (final m in medicines) m.id: m};
 
     return ListView(

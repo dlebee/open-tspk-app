@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 
 import '../models/medicine.dart';
 import '../services/notification_service.dart';
@@ -50,7 +51,7 @@ class MedicinesNotifier extends StateNotifier<AsyncValue<List<Medicine>>> {
   }
 
   Future<void> add(Medicine medicine) async {
-    final list = state.valueOrNull ?? [];
+    final list = state.value ?? [];
     final updated = [...list, medicine];
     await _storage.saveMedicines(updated);
     state = AsyncValue.data(updated);
@@ -93,7 +94,7 @@ class MedicinesNotifier extends StateNotifier<AsyncValue<List<Medicine>>> {
   }
 
   Future<void> update(Medicine medicine) async {
-    final list = state.valueOrNull ?? [];
+    final list = state.value ?? [];
     final oldMedicine = list.firstWhere((m) => m.id == medicine.id, orElse: () => medicine);
     
     // Check if schedules changed
@@ -127,7 +128,7 @@ class MedicinesNotifier extends StateNotifier<AsyncValue<List<Medicine>>> {
   }
 
   Future<void> delete(String id) async {
-    final list = state.valueOrNull ?? [];
+    final list = state.value ?? [];
     final updated = list.where((m) => m.id != id).toList();
     await _storage.saveMedicines(updated);
     state = AsyncValue.data(updated);

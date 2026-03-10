@@ -17,10 +17,10 @@ final activityLogProvider = Provider<AsyncValue<List<ActivityItem>>>((ref) {
       appointmentsAsync.isLoading || medicinesAsync.isLoading) {
     return const AsyncValue.loading();
   }
-  final doses = dosesAsync.valueOrNull ?? [];
-  final flareUps = flareUpsAsync.valueOrNull ?? [];
-  final appointments = appointmentsAsync.valueOrNull ?? [];
-  final medicines = medicinesAsync.valueOrNull ?? [];
+  final doses = dosesAsync.value ?? [];
+  final flareUps = flareUpsAsync.value ?? [];
+  final appointments = appointmentsAsync.value ?? [];
+  final medicines = medicinesAsync.value ?? [];
 
   if (dosesAsync.hasError) return AsyncValue.error(dosesAsync.error!, dosesAsync.stackTrace ?? StackTrace.current);
   if (flareUpsAsync.hasError) return AsyncValue.error(flareUpsAsync.error!, flareUpsAsync.stackTrace ?? StackTrace.current);

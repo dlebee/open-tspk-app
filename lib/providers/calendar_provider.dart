@@ -16,7 +16,7 @@ bool _sameDay(DateTime a, DateTime b) =>
 
 /// Unscheduled (ad-hoc) doses for a given date. Uses takenAt or recordedAt for date.
 final unscheduledDosesForDateProvider = Provider.family<List<MedicineDose>, DateTime>((ref, date) {
-  final doses = ref.watch(dosesProvider).valueOrNull ?? [];
+  final doses = ref.watch(dosesProvider).value ?? [];
   final result = doses.where((d) {
     if (d.scheduledDate != null || d.scheduledTime != null) return false;
     final doseDate = d.takenAt ?? d.recordedAt;
@@ -31,7 +31,7 @@ final unscheduledDosesForDateProvider = Provider.family<List<MedicineDose>, Date
 });
 
 final unscheduledDosesForRangeProvider = Provider.family<Map<DateTime, List<MedicineDose>>, ({DateTime start, DateTime end})>((ref, range) {
-  final doses = ref.watch(dosesProvider).valueOrNull ?? [];
+  final doses = ref.watch(dosesProvider).value ?? [];
   final result = <DateTime, List<MedicineDose>>{};
   final end = DateTime(range.end.year, range.end.month, range.end.day);
 
@@ -55,14 +55,14 @@ final unscheduledDosesForRangeProvider = Provider.family<Map<DateTime, List<Medi
 });
 
 final scheduledDosesForDateProvider = Provider.family<List<ScheduledDose>, DateTime>((ref, date) {
-  final medicines = ref.watch(medicinesProvider).valueOrNull ?? [];
-  final doses = ref.watch(dosesProvider).valueOrNull ?? [];
+  final medicines = ref.watch(medicinesProvider).value ?? [];
+  final doses = ref.watch(dosesProvider).value ?? [];
   return _generateScheduledDosesForDate(medicines, doses, date);
 });
 
 final scheduledDosesForRangeProvider = Provider.family<Map<DateTime, List<ScheduledDose>>, ({DateTime start, DateTime end})>((ref, range) {
-  final medicines = ref.watch(medicinesProvider).valueOrNull ?? [];
-  final doses = ref.watch(dosesProvider).valueOrNull ?? [];
+  final medicines = ref.watch(medicinesProvider).value ?? [];
+  final doses = ref.watch(dosesProvider).value ?? [];
   final result = <DateTime, List<ScheduledDose>>{};
   var d = DateTime(range.start.year, range.start.month, range.start.day);
   final end = DateTime(range.end.year, range.end.month, range.end.day);
@@ -202,14 +202,14 @@ List<ScheduledDose> _generateScheduledDosesForDate(
 
 /// Flare-ups for a given date.
 final flareUpsForDateProvider = Provider.family<List<FlareUp>, DateTime>((ref, date) {
-  final flareUps = ref.watch(flareUpsProvider).valueOrNull ?? [];
+  final flareUps = ref.watch(flareUpsProvider).value ?? [];
   return flareUps.where((f) => _sameDay(f.date, date)).toList()
     ..sort((a, b) => a.date.compareTo(b.date));
 });
 
 /// Flare-ups for a date range.
 final flareUpsForRangeProvider = Provider.family<Map<DateTime, List<FlareUp>>, ({DateTime start, DateTime end})>((ref, range) {
-  final flareUps = ref.watch(flareUpsProvider).valueOrNull ?? [];
+  final flareUps = ref.watch(flareUpsProvider).value ?? [];
   final result = <DateTime, List<FlareUp>>{};
   final end = DateTime(range.end.year, range.end.month, range.end.day);
 
@@ -228,14 +228,14 @@ final flareUpsForRangeProvider = Provider.family<Map<DateTime, List<FlareUp>>, (
 
 /// Appointments for a given date.
 final appointmentsForDateProvider = Provider.family<List<AppointmentNote>, DateTime>((ref, date) {
-  final appointments = ref.watch(appointmentsProvider).valueOrNull ?? [];
+  final appointments = ref.watch(appointmentsProvider).value ?? [];
   return appointments.where((a) => _sameDay(a.date, date)).toList()
     ..sort((a, b) => a.date.compareTo(b.date));
 });
 
 /// Appointments for a date range.
 final appointmentsForRangeProvider = Provider.family<Map<DateTime, List<AppointmentNote>>, ({DateTime start, DateTime end})>((ref, range) {
-  final appointments = ref.watch(appointmentsProvider).valueOrNull ?? [];
+  final appointments = ref.watch(appointmentsProvider).value ?? [];
   final result = <DateTime, List<AppointmentNote>>{};
   final end = DateTime(range.end.year, range.end.month, range.end.day);
 

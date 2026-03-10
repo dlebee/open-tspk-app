@@ -56,11 +56,11 @@ class ExportService {
     final dateStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
     final file = File('${dir.path}/thygeson_export_$dateStr.json');
     await file.writeAsString(jsonContent);
-    await Share.shareXFiles(
-      [XFile(file.path)],
+    await SharePlus.instance.share(ShareParams(
+      files: [XFile(file.path)],
       text: 'Thygeson data export',
       sharePositionOrigin: sharePositionOrigin,
-    );
+    ));
   }
 
   /// Parses a previously exported JSON string. Throws on invalid format.

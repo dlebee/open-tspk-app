@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 
 import '../models/medicine_dose.dart';
 import '../services/storage_service.dart';
@@ -28,7 +29,7 @@ class DosesNotifier extends StateNotifier<AsyncValue<List<MedicineDose>>> {
 
   Future<void> add(MedicineDose dose) async {
     try {
-      final list = state.valueOrNull ?? [];
+      final list = state.value ?? [];
       final updated = [...list, dose];
       await _storage.saveDoses(updated);
       state = AsyncValue.data(updated);
@@ -41,7 +42,7 @@ class DosesNotifier extends StateNotifier<AsyncValue<List<MedicineDose>>> {
 
   Future<void> delete(String id) async {
     try {
-      final list = state.valueOrNull ?? [];
+      final list = state.value ?? [];
       final updated = list.where((d) => d.id != id).toList();
       await _storage.saveDoses(updated);
       state = AsyncValue.data(updated);

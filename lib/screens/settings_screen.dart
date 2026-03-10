@@ -180,10 +180,10 @@ class SettingsScreen extends ConsumerWidget {
     WidgetRef ref, {
     BuildContext? shareOriginContext,
   }) async {
-    final medicines = ref.read(medicinesProvider).valueOrNull ?? [];
-    final doses = ref.read(dosesProvider).valueOrNull ?? [];
-    final flareUps = ref.read(flareUpsProvider).valueOrNull ?? [];
-    final appointments = ref.read(appointmentsProvider).valueOrNull ?? [];
+    final medicines = ref.read(medicinesProvider).value ?? [];
+    final doses = ref.read(dosesProvider).value ?? [];
+    final flareUps = ref.read(flareUpsProvider).value ?? [];
+    final appointments = ref.read(appointmentsProvider).value ?? [];
 
     final exported = ExportService.export(
       medicines: medicines,

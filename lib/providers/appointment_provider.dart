@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 
 import '../models/appointment_note.dart';
 import '../services/storage_service.dart';
@@ -26,21 +27,21 @@ class AppointmentsNotifier extends StateNotifier<AsyncValue<List<AppointmentNote
   }
 
   Future<void> add(AppointmentNote note) async {
-    final list = state.valueOrNull ?? [];
+    final list = state.value ?? [];
     final updated = [...list, note];
     await _storage.saveAppointments(updated);
     state = AsyncValue.data(updated);
   }
 
   Future<void> update(AppointmentNote note) async {
-    final list = state.valueOrNull ?? [];
+    final list = state.value ?? [];
     final updated = list.map((a) => a.id == note.id ? note : a).toList();
     await _storage.saveAppointments(updated);
     state = AsyncValue.data(updated);
   }
 
   Future<void> delete(String id) async {
-    final list = state.valueOrNull ?? [];
+    final list = state.value ?? [];
     final updated = list.where((a) => a.id != id).toList();
     await _storage.saveAppointments(updated);
     state = AsyncValue.data(updated);

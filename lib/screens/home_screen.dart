@@ -29,10 +29,10 @@ class HomeScreen extends ConsumerWidget {
     final yesterdayScheduled = ref.watch(scheduledDosesForDateProvider(yesterday));
     final yesterdayUnscheduled = ref.watch(unscheduledDosesForDateProvider(yesterday));
 
-    final allMedicines = ref.watch(medicinesProvider).valueOrNull ?? [];
-    final activeMedicines = ref.watch(medicinesProvider).valueOrNull ?? [];
+    final allMedicines = ref.watch(medicinesProvider).value ?? [];
+    final activeMedicines = ref.watch(medicinesProvider).value ?? [];
     final medicineById = {for (final m in allMedicines) m.id: m};
-    final appointments = ref.watch(appointmentsProvider).valueOrNull ?? [];
+    final appointments = ref.watch(appointmentsProvider).value ?? [];
     final nextAppointment = appointments
         .where((a) => a.date.isAfter(now))
         .fold<AppointmentNote?>(

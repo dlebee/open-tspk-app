@@ -140,7 +140,7 @@ class NotificationService {
         defaultPresentList: true, // Show in notification center when app is in foreground
       );
       final initialized = await _plugin.initialize(
-        InitializationSettings(android: android, iOS: ios),
+        settings: InitializationSettings(android: android, iOS: ios),
         onDidReceiveNotificationResponse: _onNotificationTap,
       );
       debugPrint('[NotificationService] Plugin initialized: $initialized');
@@ -757,11 +757,11 @@ class NotificationService {
                 
                 try {
                   await _plugin.zonedSchedule(
-                    id,
-                    message,
-                    'Scheduled: $time',
-                    notificationTime,
-                    NotificationDetails(
+                    id: id,
+                    title: message,
+                    body: 'Scheduled: $time',
+                    scheduledDate: notificationTime,
+                    notificationDetails: NotificationDetails(
                       android: AndroidNotificationDetails(
                         'thygeson_meds',
                         'Medicine reminders',
@@ -778,8 +778,6 @@ class NotificationService {
                       ),
                     ),
                     androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-                    uiLocalNotificationDateInterpretation:
-                        UILocalNotificationDateInterpretation.absoluteTime,
                     matchDateTimeComponents: DateTimeComponents.dayOfWeekAndTime, // All repeat weekly
                     payload: payload,
                   );
@@ -1014,7 +1012,7 @@ class NotificationService {
     
     try {
       // Cancel any existing test notification first
-      await _plugin.cancel(_testNotificationId);
+      await _plugin.cancel(id: _testNotificationId);
       
       final now = tz.TZDateTime.now(tz.local);
       final scheduledTime = now.add(delay);
@@ -1024,11 +1022,11 @@ class NotificationService {
       debugPrint('[NotificationService] Time difference: ${delay.inSeconds} seconds');
       
       await _plugin.zonedSchedule(
-        _testNotificationId,
-        'Test Notification',
-        'This is a test notification from the Notification Explorer',
-        scheduledTime,
-        NotificationDetails(
+        id: _testNotificationId,
+        title: 'Test Notification',
+        body: 'This is a test notification from the Notification Explorer',
+        scheduledDate: scheduledTime,
+        notificationDetails: NotificationDetails(
           android: AndroidNotificationDetails(
             'thygeson_meds',
             'Medicine reminders',
@@ -1046,7 +1044,6 @@ class NotificationService {
           ),
         ),
         androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-        uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
       );
       debugPrint('[NotificationService] ✓ Test notification scheduled for $scheduledTime (ID: $_testNotificationId)');
     } catch (e, stackTrace) {
