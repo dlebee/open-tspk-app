@@ -36,11 +36,6 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.menu),
-          onPressed: () => Scaffold.of(context).openDrawer(),
-          tooltip: 'Open menu',
-        ),
         title: Text(_titleForView()),
         actions: [
           IconButton(

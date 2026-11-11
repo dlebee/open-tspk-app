@@ -17,11 +17,6 @@ class ActivityLogScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.menu),
-          onPressed: () => Scaffold.of(context).openDrawer(),
-          tooltip: 'Open menu',
-        ),
         title: const Text('Activity'),
       ),
       body: activityAsync.when(

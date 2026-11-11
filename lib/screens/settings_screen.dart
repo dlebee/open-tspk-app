@@ -18,140 +18,114 @@ import '../providers/medicine_provider.dart';
 import '../services/storage_service.dart';
 import '../services/notification_service.dart';
 import '../providers/storage_provider.dart';
-import 'notification_explorer_screen.dart';
-import 'storage_explorer_screen.dart';
+import 'debug_screen.dart';
+import '../theme/dusk_theme.dart';
+import '../ui/dusk_ui.dart';
+import '../app_version.dart';
 
-class SettingsScreen extends ConsumerWidget {
+class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return Scaffold(
-      appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.menu),
-          onPressed: () => Scaffold.of(context).openDrawer(),
-          tooltip: 'Open menu',
+  ConsumerState<SettingsScreen> createState() => _SettingsScreenState();
+}
+
+class _SettingsScreenState extends ConsumerState<SettingsScreen> {
+  int _versionTaps = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    final ref = this.ref;
+    final highContrast = ref.watch(highContrastProvider);
+    final developerMode = ref.watch(developerModeProvider);
+    final preference = ref.watch(notificationReminderPreferenceProvider);
+    return DuskPage(
+      title: 'Settings',
+      children: [
+        const SectionLabel('Reminders'),
+        _Group(children: [
+          _Row(
+            title: 'Drop reminders',
+            value: _getNotificationSummary(preference),
+            onTap: () => _showNotificationConfigurationBottomSheet(context, ref),
+          ),
+        ]),
+        const SizedBox(height: 20),
+        const SectionLabel('Easy on the eyes'),
+        _Group(children: [
+          SwitchListTile(
+            title: const Text('Extra contrast'),
+            subtitle: const Text('Brighter text on the dark background'),
+            value: highContrast,
+            onChanged: (v) => ref.read(highContrastProvider.notifier).state = v,
+          ),
+        ]),
+        const SizedBox(height: 20),
+        const SectionLabel('Backup and sync'),
+        _Group(children: [_CloudSyncSection()]),
+        const Padding(
+          padding: EdgeInsets.fromLTRB(4, 8, 4, 0),
+          child: Text(
+            'Your data is stored on this phone and included in iCloud Backup (iOS) or Google Backup (Android) when those are on.',
+            style: TextStyle(fontSize: 13, color: Dusk.textMuted),
+          ),
         ),
-        title: const Text('Settings'),
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          Consumer(
-            builder: (context, ref, _) {
-              final highContrast = ref.watch(highContrastProvider);
-              return Semantics(
-                label: 'High contrast mode',
-                child: SwitchListTile(
-                  secondary: const Icon(Icons.contrast),
-                  title: const Text('High contrast'),
-                  subtitle: const Text('Improve visibility'),
-                  value: highContrast,
-                  onChanged: (v) =>
-                      ref.read(highContrastProvider.notifier).state = v,
-                ),
-              );
-            },
-          ),
-          Consumer(
-            builder: (context, ref, _) {
-              final developerMode = ref.watch(developerModeProvider);
-              return SwitchListTile(
-                secondary: const Icon(Icons.developer_mode),
-                title: const Text('Developer mode'),
-                subtitle: const Text('Enable advanced features'),
-                value: developerMode,
-                onChanged: (v) =>
-                    ref.read(developerModeProvider.notifier).setEnabled(v),
-              );
-            },
-          ),
-          Consumer(
-            builder: (context, ref, _) {
-              final developerMode = ref.watch(developerModeProvider);
-              if (!developerMode) return const SizedBox.shrink();
-              return ListTile(
-                leading: const Icon(Icons.notifications_active),
-                title: const Text('Notification Explorer'),
-                subtitle: const Text('View all scheduled notifications'),
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const NotificationExplorerScreen(),
-                    ),
-                  );
-                },
-              );
-            },
-          ),
-          Consumer(
-            builder: (context, ref, _) {
-              final developerMode = ref.watch(developerModeProvider);
-              if (!developerMode) return const SizedBox.shrink();
-              return ListTile(
-                leading: const Icon(Icons.storage),
-                title: const Text('Storage Explorer'),
-                subtitle: const Text('View raw storage data'),
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const StorageExplorerScreen(),
-                    ),
-                  );
-                },
-              );
-            },
-          ),
-          Consumer(
-            builder: (context, ref, _) {
-              final preference = ref.watch(notificationReminderPreferenceProvider);
-              return ListTile(
-                leading: const Icon(Icons.notifications_active),
-                title: const Text('Configure notifications'),
-                subtitle: Text(_getNotificationSummary(preference)),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => _showNotificationConfigurationBottomSheet(context, ref),
-              );
-            },
-          ),
+        const SizedBox(height: 20),
+        const SectionLabel('Your data'),
+        _Group(children: [
           Builder(
-            builder: (tileContext) => ListTile(
-              leading: const Icon(Icons.upload_file),
-              title: const Text('Export data'),
-              subtitle: const Text('Export all data as JSON'),
+            builder: (tileContext) => _Row(
+              title: 'Export everything',
+              value: 'JSON',
               onTap: () => _exportData(context, ref, shareOriginContext: tileContext),
             ),
           ),
-          ListTile(
-            leading: const Icon(Icons.download),
-            title: const Text('Import data'),
-            subtitle: const Text('Restore from a previously exported JSON file'),
-            onTap: () => _importData(context, ref),
-          ),
-          const Divider(),
-          ListTile(
-            leading: const Icon(Icons.delete_forever, color: Colors.red),
-            title: const Text('Wipe all data'),
-            subtitle: const Text('Delete all medicines, doses, flare-ups, and appointments'),
-            textColor: Colors.red,
-            iconColor: Colors.red,
+          _Row(title: 'Import a backup', onTap: () => _importData(context, ref)),
+          _Row(
+            title: 'Wipe all data',
+            danger: true,
             onTap: () => _confirmWipeData(context, ref),
           ),
-          const Divider(),
-          _CloudSyncSection(),
-          const Divider(),
-          const ListTile(
-            leading: Icon(Icons.cloud),
-            title: Text('Backup'),
-            subtitle: Text(
-              'Your data is stored locally and included in iCloud Backup (iOS) or Google Backup (Android) when enabled in device settings.',
+        ]),
+        if (developerMode) ...[
+          const SizedBox(height: 20),
+          const SectionLabel('Developer'),
+          _Group(children: [
+            _Row(
+              title: 'Debug tools',
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const DebugScreen()),
+              ),
+            ),
+            SwitchListTile(
+              title: const Text('Developer mode'),
+              value: true,
+              onChanged: (v) => ref.read(developerModeProvider.notifier).setEnabled(v),
+            ),
+          ]),
+        ],
+        const SizedBox(height: 24),
+        Center(
+          child: GestureDetector(
+            onTap: () async {
+              if (developerMode) return;
+              _versionTaps++;
+              if (_versionTaps >= 7) {
+                await ref.read(developerModeProvider.notifier).setEnabled(true);
+                if (context.mounted) showDuskSnack(context, 'Developer mode on');
+              }
+            },
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Text(
+                'Thygeson $appVersionLabel',
+                style: const TextStyle(fontSize: 12, color: Dusk.textMuted),
+              ),
             ),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
@@ -808,5 +782,59 @@ class _NotificationConfigurationSheetState extends ConsumerState<_NotificationCo
         setState(() => _isSaving = false);
       }
     }
+  }
+}
+
+class _Group extends StatelessWidget {
+  const _Group({required this.children});
+
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Dusk.surface,
+      borderRadius: BorderRadius.circular(18),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        children: [
+          for (var i = 0; i < children.length; i++) ...[
+            if (i > 0) const Divider(indent: 16, endIndent: 16),
+            children[i],
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _Row extends StatelessWidget {
+  const _Row({required this.title, this.value, this.onTap, this.danger = false});
+
+  final String title;
+  final String? value;
+  final VoidCallback? onTap;
+  final bool danger;
+
+  @override
+  Widget build(BuildContext context) {
+    final long = (value?.length ?? 0) > 12;
+    return ListTile(
+      shape: const RoundedRectangleBorder(),
+      title: Text(title, style: TextStyle(color: danger ? Dusk.rose : Dusk.text)),
+      subtitle: long ? Text(value!, style: const TextStyle(color: Dusk.textMuted)) : null,
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (value != null && !long)
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 160),
+              child: Text(value!, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Dusk.textMuted)),
+            ),
+          if (!danger) const Icon(Icons.chevron_right, color: Dusk.textMuted),
+        ],
+      ),
+      onTap: onTap,
+    );
   }
 }

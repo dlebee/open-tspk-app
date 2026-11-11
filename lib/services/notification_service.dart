@@ -1053,6 +1053,40 @@ class NotificationService {
     }
   }
   
+  /// Human-readable permission state for the debug screen.
+  static Future<String> permissionSummary() async {
+    try {
+      if (Platform.isAndroid) {
+        final android = _plugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+        final enabled = await android?.areNotificationsEnabled();
+        final exact = await android?.canScheduleExactNotifications();
+        return 'Notifications: ${enabled == true ? 'allowed' : 'blocked'} · exact alarms: ${exact == true ? 'yes' : 'no'}';
+      }
+      if (Platform.isIOS) {
+        final ios = _plugin.resolvePlatformSpecificImplementation<IOSFlutterLocalNotificationsPlugin>();
+        final p = await ios?.checkPermissions();
+        if (p == null) return 'Notifications: not asked yet';
+        return 'Notifications: ${p.isEnabled ? 'allowed' : 'blocked'} · alert ${p.isAlertEnabled} · sound ${p.isSoundEnabled}';
+      }
+      return 'Platform: ${Platform.operatingSystem}';
+    } catch (e) {
+      return 'Could not read permissions: $e';
+    }
+  }
+
+  /// Ask for notification permission again (iOS prompt / Android 13+).
+  static Future<bool?> requestPermission() async {
+    if (Platform.isAndroid) {
+      final android = _plugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+      return android?.requestNotificationsPermission();
+    }
+    if (Platform.isIOS) {
+      final ios = _plugin.resolvePlatformSpecificImplementation<IOSFlutterLocalNotificationsPlugin>();
+      return ios?.requestPermissions(alert: true, badge: true, sound: true);
+    }
+    return null;
+  }
+
   /// Check and log notification permission status (for debugging)
   static Future<void> logPermissionStatus() async {
     debugPrint('[NotificationService] Checking notification permission status...');
