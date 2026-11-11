@@ -47,6 +47,8 @@
 	<true/>
 	<key>NSCameraUsageDescription</key>
 	<string>Thygeson does not use the camera. The file picker used to import a backup can offer it, but the app never takes or stores photos.</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Thygeson does not use your location. The time zone library it uses to schedule reminders includes location code, but the app never asks for or reads your location.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
