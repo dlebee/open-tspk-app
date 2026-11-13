@@ -286,5 +286,29 @@ void main() {
       await tester.pumpAndSettle();
       expect(storage.doses, hasLength(1));
     });
+
+    testWidgets('Skip this one marks a missed drop skipped without an error', (tester) async {
+      usePhone(tester);
+      final now = DateTime.now();
+      final m = Medicine(
+        name: 'Steroid drop',
+        createdAt: DateTime(now.year, now.month, now.day),
+        schedules: [
+          MedicineSchedule(eye: Eye.both, daysOfWeek: const [1, 2, 3, 4, 5, 6, 7], times: const ['00:00', '23:59']),
+        ],
+      );
+      final storage = MemoryStorage()..medicines = [m];
+      await tester.pumpWidget(app(storage));
+      await tester.pump();
+      await tester.tap(find.textContaining('Steroid drop · not logged'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Skip this one'));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(find.textContaining("Couldn't save"), findsNothing);
+      expect(storage.doses, hasLength(1));
+      expect(storage.doses.single.status, DoseStatus.skipped);
+      expect(find.text('Steroid drop · skipped'), findsOneWidget);
+    });
   });
 }

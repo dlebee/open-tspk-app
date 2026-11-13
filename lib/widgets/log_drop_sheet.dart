@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -15,36 +17,35 @@ import 'hold_button.dart';
 import 'taken_time_picker.dart';
 
 /// Records a scheduled dose as taken or skipped, replacing any earlier record.
+///
+/// The record is saved first, so it is instant and survives the sheet being closed.
+/// Reminders are rebuilt afterwards in the background: that walks every drop's
+/// schedule and can take seconds on a phone with several drops.
 Future<void> logScheduledDose(
   WidgetRef ref,
   ScheduledDose dose,
   DoseStatus status, {
   DateTime? takenAt,
 }) async {
+  final doses = ref.read(dosesProvider.notifier);
   if (dose.dose != null) {
-    await ref.read(dosesProvider.notifier).delete(dose.dose!.id);
+    await doses.delete(dose.dose!.id);
   }
   final scheduledAt = atTime(dose.scheduledDate, dose.scheduledTime);
-  try {
-    await NotificationService.cancelForSchedule(
-      dose.medicineId,
-      dose.scheduledDate,
-      dose.scheduledTime,
-      dose.eye,
-    );
-  } catch (e) {
-    debugPrint('[logScheduledDose] Failed to cancel notifications: $e');
-  }
-  await ref.read(dosesProvider.notifier).add(MedicineDose(
-        medicineId: dose.medicineId,
-        medicineName: dose.medicineName,
-        eye: dose.eye,
-        status: status,
-        recordedAt: status == DoseStatus.skipped ? scheduledAt : DateTime.now(),
-        scheduledDate: dose.scheduledDate,
-        scheduledTime: dose.scheduledTime,
-        takenAt: status == DoseStatus.taken ? (takenAt ?? DateTime.now()) : null,
-      ));
+  await doses.add(MedicineDose(
+    medicineId: dose.medicineId,
+    medicineName: dose.medicineName,
+    eye: dose.eye,
+    status: status,
+    recordedAt: status == DoseStatus.skipped ? scheduledAt : DateTime.now(),
+    scheduledDate: dose.scheduledDate,
+    scheduledTime: dose.scheduledTime,
+    takenAt: status == DoseStatus.taken ? (takenAt ?? DateTime.now()) : null,
+  ));
+  unawaited(
+    NotificationService.cancelForSchedule(dose.medicineId, dose.scheduledDate, dose.scheduledTime, dose.eye)
+        .catchError((Object e) => debugPrint('[logScheduledDose] Failed to update reminders: $e')),
+  );
 }
 
 Future<void> showLogDropSheet(BuildContext context, ScheduledDose dose) {
@@ -55,26 +56,39 @@ Future<void> showLogDropSheet(BuildContext context, ScheduledDose dose) {
   );
 }
 
-class _LogDropSheet extends ConsumerWidget {
+class _LogDropSheet extends ConsumerStatefulWidget {
   const _LogDropSheet({required this.dose});
 
   final ScheduledDose dose;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_LogDropSheet> createState() => _LogDropSheetState();
+}
+
+class _LogDropSheetState extends ConsumerState<_LogDropSheet> {
+  bool _busy = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final dose = widget.dose;
     final logged = dose.status == ScheduledDoseStatus.taken ||
         dose.status == ScheduledDoseStatus.skipped;
     // A drop from an earlier day can't be "taken now": log the time it was taken.
     final earlierDay = dayOf(dose.scheduledDate).isBefore(dayOf(DateTime.now()));
 
     Future<void> run(Future<void> Function() action, String message) async {
+      if (_busy) return; // a second tap while saving
+      setState(() => _busy = true);
       final messenger = ScaffoldMessenger.of(context);
       final nav = Navigator.of(context);
+      final route = ModalRoute.of(context);
       try {
         await action();
-        nav.pop();
+        // Close this sheet only: if it was already dismissed, leave the screen below alone.
+        if (route != null && route.isActive) nav.removeRoute(route);
         messenger.showSnackBar(SnackBar(content: Text(message)));
       } catch (e) {
+        if (mounted) setState(() => _busy = false);
         messenger.showSnackBar(SnackBar(content: Text("Couldn't save that. $e")));
       }
     }
@@ -161,6 +175,9 @@ class _LogDropSheet extends ConsumerWidget {
                 child: OutlinedButton(
                   onPressed: () => run(() async {
                     await ref.read(dosesProvider.notifier).delete(dose.dose!.id);
+                    // Bring back the reminder for this time if it's still ahead.
+                    unawaited(NotificationService.rescheduleAllNotifications()
+                        .catchError((Object e) => debugPrint('[undo] Failed to update reminders: $e')));
                   }, 'Undone'),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: Dusk.text,

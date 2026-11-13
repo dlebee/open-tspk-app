@@ -40,6 +40,7 @@ class _JourneyScreenState extends ConsumerState<JourneyScreen> {
   DateTime _month = DateTime(DateTime.now().year, DateTime.now().month);
   bool _showAllMissed = false;
   bool _showAllExtras = false;
+  bool _showAllSkipped = false;
 
   void _open(Widget w) => Navigator.of(context).push(MaterialPageRoute(builder: (_) => w));
 
@@ -69,10 +70,16 @@ class _JourneyScreenState extends ConsumerState<JourneyScreen> {
       for (final e in scheduledByDay.entries)
         ...e.value.where((d) => d.status == ScheduledDoseStatus.missed),
     ]..sort((a, b) => atTime(b.scheduledDate, b.scheduledTime).compareTo(atTime(a.scheduledDate, a.scheduledTime)));
+    final skipped = [
+      for (final e in scheduledByDay.entries)
+        ...e.value.where((d) => d.status == ScheduledDoseStatus.skipped),
+    ]..sort((a, b) => atTime(b.scheduledDate, b.scheduledTime).compareTo(atTime(a.scheduledDate, a.scheduledTime)));
     final extras = [for (final l in extrasByDay.values) ...l]
       ..sort((a, b) => (b.takenAt ?? b.recordedAt).compareTo(a.takenAt ?? a.recordedAt));
     int missedOn(DateTime d) =>
         (scheduledByDay[d] ?? const []).where((x) => x.status == ScheduledDoseStatus.missed).length;
+    int skippedOn(DateTime d) =>
+        (scheduledByDay[d] ?? const []).where((x) => x.status == ScheduledDoseStatus.skipped).length;
 
     final monthFlares = flareUps
         .where((f) => f.date.year == _month.year && f.date.month == _month.month && f.isFlare)
@@ -100,7 +107,7 @@ class _JourneyScreenState extends ConsumerState<JourneyScreen> {
                   tooltip: 'Previous month',
                   onPressed: () => setState(() {
                     _month = DateTime(_month.year, _month.month - 1);
-                    _showAllMissed = _showAllExtras = false;
+                    _showAllMissed = _showAllExtras = _showAllSkipped = false;
                   }),
                   icon: const Icon(Icons.chevron_left, color: Dusk.textSecondary),
                 ),
@@ -110,7 +117,7 @@ class _JourneyScreenState extends ConsumerState<JourneyScreen> {
                       ? null
                       : () => setState(() {
                           _month = DateTime(_month.year, _month.month + 1);
-                          _showAllMissed = _showAllExtras = false;
+                          _showAllMissed = _showAllExtras = _showAllSkipped = false;
                         }),
                   icon: const Icon(Icons.chevron_right),
                   color: Dusk.textSecondary,
@@ -142,6 +149,7 @@ class _JourneyScreenState extends ConsumerState<JourneyScreen> {
                     isToday: DateTime(_month.year, _month.month, d) == today,
                     isFuture: DateTime(_month.year, _month.month, d).isAfter(today),
                     missed: missedOn(DateTime(_month.year, _month.month, d)),
+                    skipped: skippedOn(DateTime(_month.year, _month.month, d)),
                     extras: extrasByDay[DateTime(_month.year, _month.month, d)]?.length ?? 0,
                     onTap: () => _open(DayScreen(date: DateTime(_month.year, _month.month, d))),
                   ),
@@ -167,6 +175,7 @@ class _JourneyScreenState extends ConsumerState<JourneyScreen> {
                   ),
                 const Text('Blank: no check-in', style: TextStyle(fontSize: 12, color: Dusk.textMuted)),
                 const _LegendDot(color: Dusk.rose, label: 'Drop not logged'),
+                const _LegendDot(color: Dusk.textSecondary, label: 'Skipped'),
                 const _LegendDot(color: Dusk.sage, label: 'Extra drop'),
               ],
             ),
@@ -258,6 +267,24 @@ class _JourneyScreenState extends ConsumerState<JourneyScreen> {
                   child: Text('Show all ${missed.length}'),
                 ),
             ],
+            if (skipped.isNotEmpty) ...[
+              const SizedBox(height: 18),
+              SectionLabel('Skipped · ${skipped.length}'),
+              for (final d in skipped.take(_showAllSkipped ? skipped.length : 5)) ...[
+                _DoseRow(
+                  dotColor: Dusk.textSecondary,
+                  title: '${d.medicineName} · ${eyeLabel(d.eye).toLowerCase()}',
+                  subtitle: '${DateFormat('EEE d MMM').format(d.scheduledDate)} · ${d.scheduledTime} · skipped',
+                  onTap: () => showLogDropSheet(context, d),
+                ),
+                const SizedBox(height: 6),
+              ],
+              if (skipped.length > 5 && !_showAllSkipped)
+                TextButton(
+                  onPressed: () => setState(() => _showAllSkipped = true),
+                  child: Text('Show all ${skipped.length}'),
+                ),
+            ],
             if (extras.isNotEmpty) ...[
               const SizedBox(height: 18),
               SectionLabel('Extra drops · ${extras.length}'),
@@ -305,10 +332,12 @@ class _DayCell extends StatelessWidget {
     required this.isFuture,
     required this.onTap,
     this.missed = 0,
+    this.skipped = 0,
     this.extras = 0,
   });
 
   final int missed;
+  final int skipped;
   final int extras;
 
   final DateTime date;
@@ -326,6 +355,7 @@ class _DayCell extends StatelessWidget {
       DateFormat('EEEE d MMMM').format(date),
       feel == null ? 'no check-in' : 'left ${feel!.$1.label}, right ${feel!.$2.label}',
       if (missed > 0) missed == 1 ? '1 drop not logged' : '$missed drops not logged',
+      if (skipped > 0) skipped == 1 ? '1 drop skipped' : '$skipped drops skipped',
       if (extras > 0) extras == 1 ? '1 extra drop' : '$extras extra drops',
     ].join(', ');
     return Semantics(
@@ -361,16 +391,17 @@ class _DayCell extends StatelessWidget {
                   ),
                 ),
               ),
-              if (missed > 0 || extras > 0)
+              if (missed > 0 || skipped > 0 || extras > 0)
                 Positioned(
                   left: 0,
                   right: 0,
                   bottom: 4,
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
+                  child: Wrap(
+                    alignment: WrapAlignment.center,
+                    spacing: 2,
                     children: [
                       if (missed > 0) const _Marker(color: Dusk.rose),
-                      if (missed > 0 && extras > 0) const SizedBox(width: 3),
+                      if (skipped > 0) const _Marker(color: Dusk.textSecondary),
                       if (extras > 0) const _Marker(color: Dusk.sage),
                     ],
                   ),
