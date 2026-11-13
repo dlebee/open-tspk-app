@@ -287,38 +287,43 @@ class _MainNavigatorState extends ConsumerState<MainNavigator> {
     final today = dayOf(now);
     final todays = [...ref.read(scheduledDosesForDateProvider(today))]
       ..sort((a, b) => a.scheduledTime.compareTo(b.scheduledTime));
-    // The drop to offer first: the earliest unlogged one that's due or overdue, else the next one.
-    final open = todays.where(
-      (d) =>
-          d.status == ScheduledDoseStatus.missed ||
-          d.status == ScheduledDoseStatus.scheduled,
-    );
-    final due = open.where(
-      (d) => atTime(
-        today,
-        d.scheduledTime,
-      ).isBefore(now.add(const Duration(minutes: 60))),
-    );
-    final suggested = due.firstOrNull ?? open.firstOrNull;
-
+    // Drops whose time has passed without a log come first: missing the time
+    // doesn't mean skipping, so they can still be taken and logged late.
+    final missed = todays.where((d) => d.status == ScheduledDoseStatus.missed).toList();
+    final upcoming = todays.where((d) => d.status == ScheduledDoseStatus.scheduled).firstOrNull;
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
       builder: (sheetCtx) => SafeArea(
-        child: Padding(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              if (suggested != null) ...[
+              for (final d in missed.take(3)) ...[
                 _PlusOption(
                   icon: Icons.water_drop,
                   highlighted: true,
-                  title: 'Log the ${suggested.scheduledTime} drop',
-                  subtitle:
-                      '${suggested.medicineName} · ${eyeLabel(suggested.eye).toLowerCase()}',
+                  title: 'Log the ${d.scheduledTime} drop',
+                  subtitle: '${d.medicineName} · not logged · ${lateBy(d.scheduledDate, d.scheduledTime)}',
                   onTap: () {
                     Navigator.pop(sheetCtx);
-                    showLogDropSheet(context, suggested);
+                    showLogDropSheet(context, d);
+                  },
+                ),
+                const SizedBox(height: 10),
+              ],
+              if (upcoming != null &&
+                  (missed.isEmpty ||
+                      atTime(today, upcoming.scheduledTime).isBefore(now.add(const Duration(minutes: 60))))) ...[
+                _PlusOption(
+                  icon: Icons.water_drop,
+                  highlighted: true,
+                  title: 'Log the ${upcoming.scheduledTime} drop',
+                  subtitle: '${upcoming.medicineName} · ${eyeLabel(upcoming.eye).toLowerCase()}',
+                  onTap: () {
+                    Navigator.pop(sheetCtx);
+                    showLogDropSheet(context, upcoming);
                   },
                 ),
                 const SizedBox(height: 10),

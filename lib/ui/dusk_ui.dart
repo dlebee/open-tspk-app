@@ -80,6 +80,16 @@ bool sameDay(DateTime a, DateTime b) =>
 
 DateTime dayOf(DateTime t) => DateTime(t.year, t.month, t.day);
 
+/// How long ago a scheduled time was, for a drop that hasn't been logged yet:
+/// "5 min late", "2 h late", "2 h 10 min late". Missing the time is not skipping.
+String lateBy(DateTime day, String hhmm, [DateTime? now]) {
+  final mins = (now ?? DateTime.now()).difference(atTime(day, hhmm)).inMinutes;
+  if (mins < 60) return '${mins < 1 ? 1 : mins} min late';
+  final h = mins ~/ 60, m = mins % 60;
+  if (h >= 24) return h >= 48 ? '${h ~/ 24} days late' : 'a day late';
+  return m == 0 || h >= 3 ? '$h h late' : '$h h $m min late';
+}
+
 DateTime atTime(DateTime day, String hhmm) {
   final p = hhmm.split(':');
   return DateTime(

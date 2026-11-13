@@ -132,17 +132,16 @@ void main() {
     await t.pageBack();
     await settle(t);
 
-    // 9. Settings → unlock developer mode → debug tools.
+    // 9. Settings → developer mode → explorers and debug tools.
     await t.tap(find.byTooltip('Settings'));
     await settle(t);
-    final version = find.textContaining('Thygeson 1.');
-    await t.scrollUntilVisible(version, 300, scrollable: find.byType(Scrollable).last);
+    final devSwitch = find.widgetWithText(SwitchListTile, 'Developer mode');
+    await t.scrollUntilVisible(devSwitch, 300, scrollable: find.byType(Scrollable).last);
     await settle(t, 300);
-    for (var i = 0; i < 7; i++) {
-      await t.tap(version);
-      await t.pump(const Duration(milliseconds: 120));
-    }
+    await t.tap(devSwitch);
     await settle(t, 1000);
+    expect(find.text('Notification explorer'), findsOneWidget);
+    expect(find.text('Storage explorer'), findsOneWidget);
     await tapText(t, 'Debug tools');
     expect(find.text('Debug tools'), findsWidgets);
     await settle(t, 1500);

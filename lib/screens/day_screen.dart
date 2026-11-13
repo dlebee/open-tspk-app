@@ -48,14 +48,15 @@ class _DayScreenState extends ConsumerState<DayScreen> {
             dot: switch (d.status) {
               ScheduledDoseStatus.taken => Dusk.amber,
               ScheduledDoseStatus.missed => Dusk.rose,
+              ScheduledDoseStatus.skipped => Dusk.textSecondary,
               _ => Dusk.textMuted,
             },
             title: d.medicineName,
             detail: switch (d.status) {
               ScheduledDoseStatus.taken =>
                 '${eyeLabel(d.eye)} · taken ${d.takenAt != null ? hm(d.takenAt!) : ''}',
-              ScheduledDoseStatus.skipped => 'Skipped',
-              ScheduledDoseStatus.missed => 'Not logged',
+              ScheduledDoseStatus.skipped => '${eyeLabel(d.eye)} · skipped',
+              ScheduledDoseStatus.missed => '${eyeLabel(d.eye)} · not logged · tap to log it',
               ScheduledDoseStatus.scheduled => '${eyeLabel(d.eye)} · coming up',
             },
             onTap: () => showLogDropSheet(context, d),

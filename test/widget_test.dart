@@ -8,6 +8,7 @@ import 'package:thygeson/models/flare_up.dart';
 import 'package:thygeson/models/medicine.dart';
 import 'package:thygeson/models/medicine_dose.dart';
 import 'package:thygeson/models/medicine_schedule.dart';
+import 'package:thygeson/widgets/unscheduled_dose_dialog.dart';
 import 'package:thygeson/models/notification_reminder_preference.dart';
 import 'package:thygeson/providers/storage_provider.dart';
 import 'package:thygeson/screens/journey_screen.dart';
@@ -144,5 +145,90 @@ void main() {
     expect(feelFromPain(true, PainLevel.terrible), EyeFeel.flaring);
     expect(feelFromPain(true, null), EyeFeel.gritty);
     expect(feelFromPain(false, PainLevel.bad), EyeFeel.calm);
+  });
+
+  test('lateBy reads naturally', () {
+    final day = DateTime(2026, 11, 13);
+    expect(lateBy(day, '08:00', DateTime(2026, 11, 13, 8, 20)), '20 min late');
+    expect(lateBy(day, '08:00', DateTime(2026, 11, 13, 10, 0)), '2 h late');
+    expect(lateBy(day, '08:00', DateTime(2026, 11, 13, 9, 30)), '1 h 30 min late');
+    expect(lateBy(day, '08:00', DateTime(2026, 11, 14, 9, 0)), 'a day late');
+  });
+
+  group('missed is not skipped', () {
+    Medicine drop() => Medicine(
+          name: 'Steroid drop',
+          createdAt: DateTime(2020),
+          schedules: [
+            MedicineSchedule(eye: Eye.both, daysOfWeek: const [1, 2, 3, 4, 5, 6, 7], times: const ['00:00', '23:59']),
+          ],
+        );
+
+    testWidgets('a past drop with no log reads "not logged", and + offers to log it late', (tester) async {
+      usePhone(tester);
+      await tester.pumpWidget(app(MemoryStorage()..medicines = [drop()]));
+      await tester.pump();
+      expect(find.textContaining('Steroid drop · not logged'), findsOneWidget);
+      expect(find.textContaining('skipped'), findsNothing);
+      await tester.tap(find.bySemanticsLabel('Log a drop or check in'));
+      await tester.pumpAndSettle();
+      expect(find.text('Log the 00:00 drop'), findsOneWidget);
+      await tester.tap(find.text('Log the 00:00 drop'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('00:00 · not logged'), findsOneWidget);
+      expect(find.text('Hold to log it now'), findsOneWidget);
+    });
+
+    testWidgets('a skipped drop reads "skipped", not "not logged"', (tester) async {
+      usePhone(tester);
+      final m = drop();
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      final storage = MemoryStorage()
+        ..medicines = [m]
+        ..doses = [
+          MedicineDose(
+            medicineId: m.id,
+            medicineName: m.name,
+            eye: Eye.both,
+            status: DoseStatus.skipped,
+            recordedAt: today,
+            scheduledDate: today,
+            scheduledTime: '00:00',
+          ),
+        ];
+      await tester.pumpWidget(app(storage));
+      await tester.pump();
+      expect(find.text('Steroid drop · skipped'), findsOneWidget);
+      expect(find.textContaining('not logged'), findsNothing);
+    });
+
+    testWidgets('an extra drop can become the missed scheduled one', (tester) async {
+      usePhone(tester);
+      final m = drop();
+      final now = DateTime.now();
+      final extra = MedicineDose(
+        medicineId: m.id,
+        medicineName: m.name,
+        eye: Eye.both,
+        status: DoseStatus.taken,
+        recordedAt: now,
+        takenAt: now,
+      );
+      final storage = MemoryStorage()
+        ..medicines = [m]
+        ..doses = [extra];
+      await tester.pumpWidget(app(storage));
+      await tester.pump();
+      await tester.tap(find.textContaining('Extra Steroid drop'));
+      await tester.pumpAndSettle();
+      expect(find.byType(UnscheduledDoseDialog), findsOneWidget);
+      await tester.tap(find.text('This was my 00:00 drop'));
+      await tester.pumpAndSettle();
+      expect(storage.doses, hasLength(1));
+      expect(storage.doses.single.scheduledTime, '00:00');
+      expect(storage.doses.single.status, DoseStatus.taken);
+      expect(find.textContaining('Steroid drop · taken'), findsOneWidget);
+    });
   });
 }

@@ -19,6 +19,8 @@ import '../services/storage_service.dart';
 import '../services/notification_service.dart';
 import '../providers/storage_provider.dart';
 import 'debug_screen.dart';
+import 'notification_explorer_screen.dart';
+import 'storage_explorer_screen.dart';
 import '../theme/dusk_theme.dart';
 import '../ui/dusk_ui.dart';
 import '../app_version.dart';
@@ -31,8 +33,6 @@ class SettingsScreen extends ConsumerStatefulWidget {
 }
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
-  int _versionTaps = 0;
-
   @override
   Widget build(BuildContext context) {
     final ref = this.ref;
@@ -87,41 +87,50 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             onTap: () => _confirmWipeData(context, ref),
           ),
         ]),
-        if (developerMode) ...[
-          const SizedBox(height: 20),
-          const SectionLabel('Developer'),
-          _Group(children: [
+        const SizedBox(height: 20),
+        const SectionLabel('Developer'),
+        _Group(children: [
+          SwitchListTile(
+            secondary: const Icon(Icons.developer_mode, color: Dusk.textSecondary),
+            title: const Text('Developer mode'),
+            subtitle: const Text('Tools for checking reminders and stored data'),
+            value: developerMode,
+            onChanged: (v) => ref.read(developerModeProvider.notifier).setEnabled(v),
+          ),
+          if (developerMode) ...[
+            _Row(
+              title: 'Notification explorer',
+              value: 'Every scheduled reminder',
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const NotificationExplorerScreen()),
+              ),
+            ),
+            _Row(
+              title: 'Storage explorer',
+              value: 'Raw stored data',
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const StorageExplorerScreen()),
+              ),
+            ),
             _Row(
               title: 'Debug tools',
+              value: 'Test reminders, demo data',
               onTap: () => Navigator.push(
                 context,
                 MaterialPageRoute(builder: (_) => const DebugScreen()),
               ),
             ),
-            SwitchListTile(
-              title: const Text('Developer mode'),
-              value: true,
-              onChanged: (v) => ref.read(developerModeProvider.notifier).setEnabled(v),
-            ),
-          ]),
-        ],
+          ],
+        ]),
         const SizedBox(height: 24),
         Center(
-          child: GestureDetector(
-            onTap: () async {
-              if (developerMode) return;
-              _versionTaps++;
-              if (_versionTaps >= 7) {
-                await ref.read(developerModeProvider.notifier).setEnabled(true);
-                if (context.mounted) showDuskSnack(context, 'Developer mode on');
-              }
-            },
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Text(
-                'Thygeson $appVersionLabel',
-                style: const TextStyle(fontSize: 12, color: Dusk.textMuted),
-              ),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Text(
+              'Thygeson $appVersionLabel',
+              style: const TextStyle(fontSize: 12, color: Dusk.textMuted),
             ),
           ),
         ),

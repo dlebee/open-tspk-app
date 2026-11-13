@@ -142,7 +142,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     const SizedBox(width: 12),
                     Expanded(
                       child: Text(
-                        missed.length == 1 ? '1 drop not logged yet' : '${missed.length} drops not logged yet',
+                        missed.length == 1
+                            ? '${missed.first.medicineName} at ${missed.first.scheduledTime} not logged yet'
+                            : '${missed.length} drops not logged yet',
                         style: const TextStyle(color: Dusk.rose, fontSize: 15),
                       ),
                     ),
@@ -249,8 +251,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             '${d.medicineName} · taken ${d.takenAt != null ? hm(d.takenAt!) : ''}',
             Dusk.textSecondary,
           ),
-        ScheduledDoseStatus.skipped => (_ringDot(Dusk.textMuted), '${d.medicineName} · skipped', Dusk.textMuted),
-        ScheduledDoseStatus.missed => (_ringDot(Dusk.rose), '${d.medicineName} · not logged', Dusk.rose),
+        ScheduledDoseStatus.skipped => (_skipDot(), '${d.medicineName} · skipped', Dusk.textSecondary),
+        ScheduledDoseStatus.missed => (
+            _ringDot(Dusk.rose),
+            '${d.medicineName} · not logged · ${lateBy(d.scheduledDate, d.scheduledTime)}',
+            Dusk.rose,
+          ),
         ScheduledDoseStatus.scheduled => (
             _ringDot(Dusk.border),
             '${d.medicineName} · ${eyeLabel(d.eye).toLowerCase()}',
@@ -292,6 +298,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           style: const TextStyle(fontSize: 15, color: Dusk.textSecondary)),
     );
   }
+
+  Widget _skipDot() => Container(
+        width: 18,
+        height: 18,
+        decoration: const BoxDecoration(color: Dusk.surfaceHigh, shape: BoxShape.circle),
+        child: const Icon(Icons.skip_next_rounded, size: 13, color: Dusk.textSecondary),
+      );
 
   Widget _doneDot() => Container(
         width: 18,

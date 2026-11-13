@@ -83,8 +83,17 @@ class _LogDropSheet extends ConsumerWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              '${dose.scheduledTime} · ${logged ? dose.status.name : 'scheduled'}',
-              style: const TextStyle(color: Dusk.textSecondary, fontSize: 13),
+              switch (dose.status) {
+                ScheduledDoseStatus.taken => '${dose.scheduledTime} · taken',
+                ScheduledDoseStatus.skipped => '${dose.scheduledTime} · skipped',
+                ScheduledDoseStatus.missed =>
+                  '${dose.scheduledTime} · not logged · ${lateBy(dose.scheduledDate, dose.scheduledTime)}',
+                ScheduledDoseStatus.scheduled => '${dose.scheduledTime} · coming up',
+              },
+              style: TextStyle(
+                color: dose.status == ScheduledDoseStatus.missed ? Dusk.rose : Dusk.textSecondary,
+                fontSize: 13,
+              ),
             ),
             const SizedBox(height: 4),
             Text(
@@ -94,10 +103,18 @@ class _LogDropSheet extends ConsumerWidget {
             ),
             const SizedBox(height: 16),
             _EyeBadges(eye: dose.eye),
+            if (dose.status == ScheduledDoseStatus.missed) ...[
+              const SizedBox(height: 14),
+              const Text(
+                "Missed the time? You can still take it. Log it here when you do.",
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 14, color: Dusk.textSecondary),
+              ),
+            ],
             const SizedBox(height: 28),
             if (logged) ...[
               Icon(
-                dose.status == ScheduledDoseStatus.taken ? Icons.check_circle : Icons.remove_circle_outline,
+                dose.status == ScheduledDoseStatus.taken ? Icons.check_circle : Icons.skip_next_rounded,
                 size: 56,
                 color: dose.status == ScheduledDoseStatus.taken ? Dusk.amber : Dusk.textMuted,
               ),
@@ -109,6 +126,16 @@ class _LogDropSheet extends ConsumerWidget {
                 style: const TextStyle(fontSize: 16, color: Dusk.text),
               ),
               const SizedBox(height: 24),
+              if (dose.status == ScheduledDoseStatus.skipped) ...[
+                HoldButton(
+                  label: 'Hold to log it now',
+                  onConfirmed: () => run(
+                    () => logScheduledDose(ref, dose, DoseStatus.taken),
+                    'Logged ${dose.medicineName}',
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
               SizedBox(
                 width: double.infinity,
                 height: 52,
@@ -126,6 +153,7 @@ class _LogDropSheet extends ConsumerWidget {
               ),
             ] else ...[
               HoldButton(
+                label: dose.status == ScheduledDoseStatus.missed ? 'Hold to log it now' : 'Hold to log',
                 onConfirmed: () => run(
                   () => logScheduledDose(ref, dose, DoseStatus.taken),
                   'Logged ${dose.medicineName}',

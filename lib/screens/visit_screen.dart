@@ -59,6 +59,7 @@ class VisitScreen extends ConsumerWidget {
     final allScheduled = scheduledByDay.values.expand((l) => l).toList();
     final taken = allScheduled.where((d) => d.status == ScheduledDoseStatus.taken).length;
     final missed = allScheduled.where((d) => d.status == ScheduledDoseStatus.missed).length;
+    final skipped = allScheduled.where((d) => d.status == ScheduledDoseStatus.skipped).length;
     final extras = extrasByDay.values.fold<int>(0, (n, l) => n + l.length);
     final feels = feelsByDay(flareUps);
     final days = calendarDaysBetween(since, today) + 1;
@@ -68,6 +69,7 @@ class VisitScreen extends ConsumerWidget {
         ..writeln('Thygeson summary · ${DateFormat('d MMM y').format(since)} to ${DateFormat('d MMM y').format(today)}')
         ..writeln()
         ..writeln('Scheduled drops taken: $taken of ${allScheduled.length - allScheduled.where((d) => d.status == ScheduledDoseStatus.scheduled).length}')
+        ..writeln('Skipped: $skipped')
         ..writeln('Not logged: $missed')
         ..writeln('Extra drops: $extras')
         ..writeln('Flare-ups (sore or flaring): $flareCount')
@@ -169,6 +171,7 @@ class VisitScreen extends ConsumerWidget {
                 children: [
                   _Num('$flareCount', 'Flare-ups'),
                   _Num('$extras', 'Extra drops'),
+                  _Num('$skipped', 'Skipped'),
                   _Num('$missed', 'Not logged'),
                 ],
               ),
