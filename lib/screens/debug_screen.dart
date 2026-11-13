@@ -14,8 +14,6 @@ import '../providers/storage_provider.dart';
 import '../services/notification_service.dart';
 import '../theme/dusk_theme.dart';
 import '../ui/dusk_ui.dart';
-import 'notification_explorer_screen.dart';
-import 'storage_explorer_screen.dart';
 
 /// Admin / debug tools. Reached from Settings once developer mode is on
 /// (tap the version number 7 times).
@@ -180,7 +178,7 @@ class _DebugScreenState extends ConsumerState<DebugScreen> {
           ),
           tile(
             'Add a drop due in 2 minutes',
-            'Tests a real reminder with Taken / Skip actions',
+            'A real reminder, 2 minutes from now',
             _addDropSoon,
             icon: Icons.alarm_add_outlined,
           ),
@@ -204,16 +202,6 @@ class _DebugScreenState extends ConsumerState<DebugScreen> {
             }),
             icon: Icons.sync,
           ),
-          tile(
-            'Notification explorer',
-            'Everything scheduled',
-            () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => const NotificationExplorerScreen(),
-              ),
-            ),
-          ),
         ]),
         const SizedBox(height: 20),
         const SectionLabel('Data'),
@@ -223,14 +211,6 @@ class _DebugScreenState extends ConsumerState<DebugScreen> {
             '3 weeks of drops, check-ins and visits',
             _seedDemo,
             icon: Icons.auto_awesome_outlined,
-          ),
-          tile(
-            'Storage explorer',
-            'Raw stored data',
-            () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const StorageExplorerScreen()),
-            ),
           ),
         ]),
       ],
