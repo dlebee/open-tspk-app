@@ -86,8 +86,14 @@ class UnscheduledDoseDialog extends ConsumerWidget {
         TextButton(
           onPressed: () async {
             final nav = Navigator.of(context);
-            await ref.read(dosesProvider.notifier).delete(dose.id);
+            final messenger = ScaffoldMessenger.of(context);
+            final notifier = ref.read(dosesProvider.notifier);
+            await notifier.delete(dose.id);
             nav.pop();
+            messenger.showSnackBar(SnackBar(
+              content: Text('Removed extra $medicineName'),
+              action: SnackBarAction(label: 'Undo', onPressed: () => notifier.add(dose)),
+            ));
           },
           style: TextButton.styleFrom(foregroundColor: Dusk.rose),
           child: const Text('Delete'),

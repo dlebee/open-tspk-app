@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 
 import '../models/medicine.dart';
 import '../models/medicine_dose.dart';
@@ -63,6 +64,8 @@ class _LogDropSheet extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final logged = dose.status == ScheduledDoseStatus.taken ||
         dose.status == ScheduledDoseStatus.skipped;
+    // A drop from an earlier day can't be "taken now": log the time it was taken.
+    final earlierDay = dayOf(dose.scheduledDate).isBefore(dayOf(DateTime.now()));
 
     Future<void> run(Future<void> Function() action, String message) async {
       final messenger = ScaffoldMessenger.of(context);
@@ -86,8 +89,9 @@ class _LogDropSheet extends ConsumerWidget {
               switch (dose.status) {
                 ScheduledDoseStatus.taken => '${dose.scheduledTime} · taken',
                 ScheduledDoseStatus.skipped => '${dose.scheduledTime} · skipped',
-                ScheduledDoseStatus.missed =>
-                  '${dose.scheduledTime} · not logged · ${lateBy(dose.scheduledDate, dose.scheduledTime)}',
+                ScheduledDoseStatus.missed => earlierDay
+                    ? '${DateFormat('EEE d MMM').format(dose.scheduledDate)} · ${dose.scheduledTime} · not logged'
+                    : '${dose.scheduledTime} · not logged · ${lateBy(dose.scheduledDate, dose.scheduledTime)}',
                 ScheduledDoseStatus.scheduled => '${dose.scheduledTime} · coming up',
               },
               style: TextStyle(
@@ -105,8 +109,10 @@ class _LogDropSheet extends ConsumerWidget {
             _EyeBadges(eye: dose.eye),
             if (dose.status == ScheduledDoseStatus.missed) ...[
               const SizedBox(height: 14),
-              const Text(
-                "Missed the time? You can still take it. Log it here when you do.",
+              Text(
+                earlierDay
+                    ? 'Took it after all? Log when you took it, or mark it skipped.'
+                    : "Missed the time? You can still take it. Log it here when you do.",
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 14, color: Dusk.textSecondary),
               ),
@@ -127,13 +133,26 @@ class _LogDropSheet extends ConsumerWidget {
               ),
               const SizedBox(height: 24),
               if (dose.status == ScheduledDoseStatus.skipped) ...[
-                HoldButton(
-                  label: 'Hold to log it now',
-                  onConfirmed: () => run(
-                    () => logScheduledDose(ref, dose, DoseStatus.taken),
-                    'Logged ${dose.medicineName}',
+                if (earlierDay)
+                  PrimaryButton(
+                    label: 'Took it at ${dose.scheduledTime} after all',
+                    onPressed: () => run(
+                      () => logScheduledDose(
+                        ref,
+                        dose,
+                        DoseStatus.taken,
+                        takenAt: atTime(dose.scheduledDate, dose.scheduledTime),
+                      ),
+                      'Logged at ${dose.scheduledTime}',
+                    ),
+                  )
+                else
+                  HoldButton(
+                    onConfirmed: () => run(
+                      () => logScheduledDose(ref, dose, DoseStatus.taken),
+                      'Logged ${dose.medicineName}',
+                    ),
                   ),
-                ),
                 const SizedBox(height: 12),
               ],
               SizedBox(
@@ -152,30 +171,44 @@ class _LogDropSheet extends ConsumerWidget {
                 ),
               ),
             ] else ...[
-              HoldButton(
-                label: dose.status == ScheduledDoseStatus.missed ? 'Hold to log it now' : 'Hold to log',
-                onConfirmed: () => run(
-                  () => logScheduledDose(ref, dose, DoseStatus.taken),
-                  'Logged ${dose.medicineName}',
+              if (earlierDay)
+                PrimaryButton(
+                  label: 'Took it at ${dose.scheduledTime}',
+                  onPressed: () => run(
+                    () => logScheduledDose(
+                      ref,
+                      dose,
+                      DoseStatus.taken,
+                      takenAt: atTime(dose.scheduledDate, dose.scheduledTime),
+                    ),
+                    'Logged at ${dose.scheduledTime}',
+                  ),
+                )
+              else
+                HoldButton(
+                  onConfirmed: () => run(
+                    () => logScheduledDose(ref, dose, DoseStatus.taken),
+                    'Logged ${dose.medicineName}',
+                  ),
                 ),
-              ),
               const SizedBox(height: 16),
               Wrap(
                 alignment: WrapAlignment.center,
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
-                  TextButton(
-                    onPressed: () => run(
-                      () => logScheduledDose(
-                        ref,
-                        dose,
-                        DoseStatus.taken,
-                        takenAt: atTime(dose.scheduledDate, dose.scheduledTime),
+                  if (!earlierDay)
+                    TextButton(
+                      onPressed: () => run(
+                        () => logScheduledDose(
+                          ref,
+                          dose,
+                          DoseStatus.taken,
+                          takenAt: atTime(dose.scheduledDate, dose.scheduledTime),
+                        ),
+                        'Logged at ${dose.scheduledTime}',
                       ),
-                      'Logged at ${dose.scheduledTime}',
+                      child: Text('Took it at ${dose.scheduledTime}'),
                     ),
-                    child: Text('Took it at ${dose.scheduledTime}'),
-                  ),
                   TextButton(
                     onPressed: () {
                       Navigator.pop(context);

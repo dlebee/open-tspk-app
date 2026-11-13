@@ -4,10 +4,15 @@ import 'package:intl/intl.dart';
 
 import '../models/appointment_note.dart';
 import '../models/flare_up.dart';
+import '../models/medicine_dose.dart';
+import '../models/scheduled_dose.dart';
 import '../providers/appointment_provider.dart';
+import '../providers/calendar_provider.dart';
 import '../providers/flare_up_provider.dart';
 import '../theme/dusk_theme.dart';
 import '../ui/dusk_ui.dart';
+import '../widgets/log_drop_sheet.dart';
+import '../widgets/unscheduled_dose_dialog.dart';
 import 'day_screen.dart';
 import 'visit_screen.dart';
 
@@ -33,6 +38,8 @@ class JourneyScreen extends ConsumerStatefulWidget {
 
 class _JourneyScreenState extends ConsumerState<JourneyScreen> {
   DateTime _month = DateTime(DateTime.now().year, DateTime.now().month);
+  bool _showAllMissed = false;
+  bool _showAllExtras = false;
 
   void _open(Widget w) => Navigator.of(context).push(MaterialPageRoute(builder: (_) => w));
 
@@ -48,6 +55,24 @@ class _JourneyScreenState extends ConsumerState<JourneyScreen> {
     final first = DateTime(_month.year, _month.month, 1);
     final daysInMonth = DateTime(_month.year, _month.month + 1, 0).day;
     final leading = first.weekday - 1;
+
+    final monthEnd = DateTime(_month.year, _month.month, daysInMonth);
+    final range = (start: first, end: monthEnd.isAfter(today) ? today : monthEnd);
+    final hasPast = !first.isAfter(today);
+    final scheduledByDay = hasPast
+        ? ref.watch(scheduledDosesForRangeProvider(range))
+        : const <DateTime, List<ScheduledDose>>{};
+    final extrasByDay = hasPast
+        ? ref.watch(unscheduledDosesForRangeProvider(range))
+        : const <DateTime, List<MedicineDose>>{};
+    final missed = [
+      for (final e in scheduledByDay.entries)
+        ...e.value.where((d) => d.status == ScheduledDoseStatus.missed),
+    ]..sort((a, b) => atTime(b.scheduledDate, b.scheduledTime).compareTo(atTime(a.scheduledDate, a.scheduledTime)));
+    final extras = [for (final l in extrasByDay.values) ...l]
+      ..sort((a, b) => (b.takenAt ?? b.recordedAt).compareTo(a.takenAt ?? a.recordedAt));
+    int missedOn(DateTime d) =>
+        (scheduledByDay[d] ?? const []).where((x) => x.status == ScheduledDoseStatus.missed).length;
 
     final monthFlares = flareUps
         .where((f) => f.date.year == _month.year && f.date.month == _month.month && f.isFlare)
@@ -73,14 +98,20 @@ class _JourneyScreenState extends ConsumerState<JourneyScreen> {
                 ),
                 IconButton(
                   tooltip: 'Previous month',
-                  onPressed: () => setState(() => _month = DateTime(_month.year, _month.month - 1)),
+                  onPressed: () => setState(() {
+                    _month = DateTime(_month.year, _month.month - 1);
+                    _showAllMissed = _showAllExtras = false;
+                  }),
                   icon: const Icon(Icons.chevron_left, color: Dusk.textSecondary),
                 ),
                 IconButton(
                   tooltip: 'Next month',
                   onPressed: isCurrentMonth
                       ? null
-                      : () => setState(() => _month = DateTime(_month.year, _month.month + 1)),
+                      : () => setState(() {
+                          _month = DateTime(_month.year, _month.month + 1);
+                          _showAllMissed = _showAllExtras = false;
+                        }),
                   icon: const Icon(Icons.chevron_right),
                   color: Dusk.textSecondary,
                   disabledColor: Dusk.border,
@@ -110,6 +141,8 @@ class _JourneyScreenState extends ConsumerState<JourneyScreen> {
                     feel: feels[DateTime(_month.year, _month.month, d)],
                     isToday: DateTime(_month.year, _month.month, d) == today,
                     isFuture: DateTime(_month.year, _month.month, d).isAfter(today),
+                    missed: missedOn(DateTime(_month.year, _month.month, d)),
+                    extras: extrasByDay[DateTime(_month.year, _month.month, d)]?.length ?? 0,
                     onTap: () => _open(DayScreen(date: DateTime(_month.year, _month.month, d))),
                   ),
               ],
@@ -133,6 +166,8 @@ class _JourneyScreenState extends ConsumerState<JourneyScreen> {
                     ],
                   ),
                 const Text('Blank: no check-in', style: TextStyle(fontSize: 12, color: Dusk.textMuted)),
+                const _LegendDot(color: Dusk.rose, label: 'Drop not logged'),
+                const _LegendDot(color: Dusk.sage, label: 'Extra drop'),
               ],
             ),
             const SizedBox(height: 24),
@@ -198,6 +233,49 @@ class _JourneyScreenState extends ConsumerState<JourneyScreen> {
               ),
               const SizedBox(height: 6),
             ],
+            if (missed.isNotEmpty) ...[
+              const SizedBox(height: 18),
+              SectionLabel('Drops not logged · ${missed.length}'),
+              const Padding(
+                padding: EdgeInsets.only(bottom: 8, left: 2),
+                child: Text(
+                  'Took one after all? Tap it to log when you took it, or mark it skipped.',
+                  style: TextStyle(fontSize: 13, color: Dusk.textSecondary),
+                ),
+              ),
+              for (final d in missed.take(_showAllMissed ? missed.length : 5)) ...[
+                _DoseRow(
+                  dotColor: Dusk.rose,
+                  title: '${d.medicineName} · ${eyeLabel(d.eye).toLowerCase()}',
+                  subtitle: '${DateFormat('EEE d MMM').format(d.scheduledDate)} · ${d.scheduledTime} · not logged',
+                  onTap: () => showLogDropSheet(context, d),
+                ),
+                const SizedBox(height: 6),
+              ],
+              if (missed.length > 5 && !_showAllMissed)
+                TextButton(
+                  onPressed: () => setState(() => _showAllMissed = true),
+                  child: Text('Show all ${missed.length}'),
+                ),
+            ],
+            if (extras.isNotEmpty) ...[
+              const SizedBox(height: 18),
+              SectionLabel('Extra drops · ${extras.length}'),
+              for (final x in extras.take(_showAllExtras ? extras.length : 5)) ...[
+                _DoseRow(
+                  dotColor: Dusk.sage,
+                  title: 'Extra ${x.medicineName ?? 'drop'} · ${eyeLabel(x.eye).toLowerCase()}',
+                  subtitle: '${DateFormat('EEE d MMM · HH:mm').format(x.takenAt ?? x.recordedAt)} · tap to edit or remove',
+                  onTap: () => showDialog(context: context, builder: (_) => UnscheduledDoseDialog(dose: x)),
+                ),
+                const SizedBox(height: 6),
+              ],
+              if (extras.length > 5 && !_showAllExtras)
+                TextButton(
+                  onPressed: () => setState(() => _showAllExtras = true),
+                  child: Text('Show all ${extras.length}'),
+                ),
+            ],
             const SizedBox(height: 12),
             Center(
               child: TextButton(
@@ -226,7 +304,12 @@ class _DayCell extends StatelessWidget {
     required this.isToday,
     required this.isFuture,
     required this.onTap,
+    this.missed = 0,
+    this.extras = 0,
   });
+
+  final int missed;
+  final int extras;
 
   final DateTime date;
   final (EyeFeel, EyeFeel)? feel;
@@ -239,9 +322,12 @@ class _DayCell extends StatelessWidget {
     final empty = isFuture ? const Color(0xFF232220) : Dusk.surface;
     final l = feel?.$1.tone ?? empty;
     final r = feel?.$2.tone ?? empty;
-    final label = feel == null
-        ? '${DateFormat('EEEE d MMMM').format(date)}, no check-in'
-        : '${DateFormat('EEEE d MMMM').format(date)}, left ${feel!.$1.label}, right ${feel!.$2.label}';
+    final label = [
+      DateFormat('EEEE d MMMM').format(date),
+      feel == null ? 'no check-in' : 'left ${feel!.$1.label}, right ${feel!.$2.label}',
+      if (missed > 0) missed == 1 ? '1 drop not logged' : '$missed drops not logged',
+      if (extras > 0) extras == 1 ? '1 extra drop' : '$extras extra drops',
+    ].join(', ');
     return Semantics(
       button: true,
       label: label,
@@ -275,9 +361,96 @@ class _DayCell extends StatelessWidget {
                   ),
                 ),
               ),
+              if (missed > 0 || extras > 0)
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 4,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      if (missed > 0) const _Marker(color: Dusk.rose),
+                      if (missed > 0 && extras > 0) const SizedBox(width: 3),
+                      if (extras > 0) const _Marker(color: Dusk.sage),
+                    ],
+                  ),
+                ),
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// A small dot on a day: rose for a drop not logged, sage for an extra drop.
+/// Outlined in the background colour so it reads on any feel fill.
+class _Marker extends StatelessWidget {
+  const _Marker({required this.color});
+
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 8,
+      height: 8,
+      decoration: BoxDecoration(
+        color: color,
+        shape: BoxShape.circle,
+        border: Border.all(color: Dusk.bg, width: 1.5),
+      ),
+    );
+  }
+}
+
+class _LegendDot extends StatelessWidget {
+  const _LegendDot({required this.color, required this.label});
+
+  final Color color;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _Marker(color: color),
+        const SizedBox(width: 6),
+        Text(label, style: const TextStyle(fontSize: 12, color: Dusk.textSecondary)),
+      ],
+    );
+  }
+}
+
+class _DoseRow extends StatelessWidget {
+  const _DoseRow({required this.dotColor, required this.title, required this.subtitle, required this.onTap});
+
+  final Color dotColor;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return DuskTile(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      onTap: onTap,
+      child: Row(
+        children: [
+          Container(width: 8, height: 8, decoration: BoxDecoration(color: dotColor, shape: BoxShape.circle)),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: const TextStyle(fontSize: 15, color: Dusk.text)),
+                Text(subtitle, style: const TextStyle(fontSize: 13, color: Dusk.textSecondary)),
+              ],
+            ),
+          ),
+          const Icon(Icons.chevron_right, color: Dusk.textMuted),
+        ],
       ),
     );
   }

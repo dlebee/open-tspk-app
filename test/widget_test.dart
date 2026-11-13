@@ -176,7 +176,7 @@ void main() {
       await tester.tap(find.text('Log the 00:00 drop'));
       await tester.pumpAndSettle();
       expect(find.textContaining('00:00 · not logged'), findsOneWidget);
-      expect(find.text('Hold to log it now'), findsOneWidget);
+      expect(find.text('Hold to log'), findsOneWidget);
     });
 
     testWidgets('a skipped drop reads "skipped", not "not logged"', (tester) async {
@@ -229,6 +229,62 @@ void main() {
       expect(storage.doses.single.scheduledTime, '00:00');
       expect(storage.doses.single.status, DoseStatus.taken);
       expect(find.textContaining('Steroid drop · taken'), findsOneWidget);
+    });
+  
+
+    testWidgets('Journey lists drops not logged and extras, and both can be acted on', (tester) async {
+      usePhone(tester);
+      final now = DateTime.now();
+      // Added today, so only today's 00:00 counts as not logged.
+      final m = Medicine(
+        name: 'Steroid drop',
+        createdAt: DateTime(now.year, now.month, now.day),
+        schedules: [
+          MedicineSchedule(eye: Eye.both, daysOfWeek: const [1, 2, 3, 4, 5, 6, 7], times: const ['00:00', '23:59']),
+        ],
+      );
+      final storage = MemoryStorage()
+        ..medicines = [m]
+        ..doses = [
+          MedicineDose(
+            medicineId: m.id,
+            medicineName: m.name,
+            eye: Eye.left,
+            status: DoseStatus.taken,
+            recordedAt: now,
+            takenAt: now,
+          ),
+        ];
+      await tester.pumpWidget(app(storage));
+      await tester.pump();
+      await tester.tap(find.text('Journey'));
+      await tester.pumpAndSettle();
+      final list = find.descendant(of: find.byType(JourneyScreen), matching: find.byType(Scrollable)).first;
+
+      await tester.scrollUntilVisible(find.text('DROPS NOT LOGGED · 1'), 200, scrollable: list);
+      await tester.scrollUntilVisible(find.textContaining('· 00:00 · not logged'), 200, scrollable: list);
+      await tester.drag(list, const Offset(0, -250)); // clear of the floating tab bar
+      await tester.pumpAndSettle();
+      await tester.tap(find.textContaining('· 00:00 · not logged'));
+      await tester.pumpAndSettle();
+      expect(find.text('Hold to log'), findsOneWidget);
+      expect(find.text('Skip this one'), findsOneWidget);
+      await tester.tapAt(const Offset(20, 20)); // close the sheet
+      await tester.pumpAndSettle();
+
+      await tester.scrollUntilVisible(find.text('EXTRA DROPS · 1'), 200, scrollable: list);
+      await tester.scrollUntilVisible(find.textContaining('tap to edit or remove'), 200, scrollable: list);
+      await tester.drag(list, const Offset(0, -250));
+      await tester.pumpAndSettle();
+      await tester.tap(find.textContaining('tap to edit or remove'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Delete'));
+      await tester.pumpAndSettle();
+      expect(storage.doses, isEmpty);
+      expect(find.text('Removed extra Steroid drop'), findsOneWidget);
+      await tester.tap(find.text('Undo'));
+      await tester.pumpAndSettle();
+      expect(storage.doses, hasLength(1));
     });
   });
 }

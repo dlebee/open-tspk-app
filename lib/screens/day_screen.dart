@@ -69,7 +69,7 @@ class _DayScreenState extends ConsumerState<DayScreen> {
             time: hm(x.takenAt ?? x.recordedAt),
             dot: Dusk.sage,
             title: 'Extra ${x.medicineName ?? 'drop'}',
-            detail: eyeLabel(x.eye),
+            detail: '${eyeLabel(x.eye)} · tap to edit or remove',
             onTap: () => showDialog(context: context, builder: (_) => UnscheduledDoseDialog(dose: x)),
           ),
         ),

@@ -169,6 +169,7 @@ ThemeData buildDuskTheme({bool highContrast = false}) {
     snackBarTheme: SnackBarThemeData(
       backgroundColor: Dusk.surfaceHigh,
       contentTextStyle: TextStyle(color: text),
+      actionTextColor: Dusk.amber,
       behavior: SnackBarBehavior.floating,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
     ),
